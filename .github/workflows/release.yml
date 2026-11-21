@@ -1,0 +1,26 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - run: go test ./...
+      - name: Build
+        env:
+          PUBKEY: ${{ vars.SN_LICENSE_PUBKEY }}
+        run: make dist VERSION=${GITHUB_REF_NAME#v} PUBKEY="$PUBKEY"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/SHA256SUMS

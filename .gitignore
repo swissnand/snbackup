@@ -1,0 +1,8 @@
+/dist/
+/snbackup
+/snbackup.exe
+*.key
+signing.key
+*.pem
+/data/
+.DS_Store

@@ -1,0 +1,72 @@
+SWISSNAND Backup – Lizenzbedingungen (Community / Commercial)
+Version 1.0, November 2026
+
+Copyright (c) 2026 SWISSNAND. Alle Rechte vorbehalten.
+
+Diese Software ("SWISSNAND Backup", inklusive Quellcode, Binärdateien,
+Dokumentation und Web-Oberfläche) wird unter den folgenden Bedingungen
+zur Verfügung gestellt. Der Quellcode ist einsehbar ("source available"),
+die Software ist jedoch keine Open-Source-Software im Sinne der OSI.
+
+1. KOSTENLOSE NUTZUNG (COMMUNITY EDITION)
+
+   Die Software darf kostenlos heruntergeladen, installiert, genutzt und für
+   den eigenen Gebrauch angepasst werden, sofern die Nutzung
+   NICHT-KOMMERZIELL ist. Nicht-kommerziell ist insbesondere:
+
+   a) die private Nutzung durch natürliche Personen (z. B. Homeserver, NAS,
+      eigene Computer), sofern damit kein Einkommen erzielt wird;
+   b) die Nutzung durch Schulen, Hochschulen und Studierende für Lehre und
+      Forschung;
+   c) die Nutzung durch gemeinnützige, steuerbefreite Organisationen
+      (Vereine, Stiftungen) für ihre gemeinnützigen Zwecke;
+   d) das Testen und Evaluieren während höchstens 30 Tagen.
+
+2. KOMMERZIELLE NUTZUNG (BUSINESS / ENTERPRISE)
+
+   Jede andere Nutzung ist kommerziell und erfordert eine gültige,
+   kostenpflichtige Lizenz von SWISSNAND. Kommerziell ist insbesondere:
+
+   a) die Nutzung durch Unternehmen, Selbständige, Behörden und
+      Organisationen jeder Grösse für ihre Daten oder Systeme;
+   b) die Erbringung von Dienstleistungen für Dritte (z. B. IT-Dienstleister,
+      Managed Services, Hosting), bei denen die Software eingesetzt wird;
+   c) die Nutzung auf Systemen, die einem Erwerbszweck dienen.
+
+   Die Lizenz gilt für die vereinbarte Anzahl Server und Laufzeit. Lizenzen
+   und Preise: https://tools.swissnand.com
+
+3. EINSCHRÄNKUNGEN
+
+   Ohne schriftliche Zustimmung von SWISSNAND ist es nicht erlaubt,
+   a) die Software oder abgeleitete Werke zu verkaufen, zu vermieten, als
+      Dienst anzubieten oder unter eigenem Namen weiterzuverbreiten;
+   b) die Lizenzprüfung, Hinweise auf die Edition, Urheberrechtsvermerke
+      oder die Marke SWISSNAND zu entfernen, zu umgehen oder zu verändern;
+   c) Lizenzschlüssel zu fälschen, weiterzugeben oder mehrfach zu nutzen.
+
+   Die unveränderte Weitergabe der offiziellen Downloads zu
+   nicht-kommerziellen Zwecken ist erlaubt, sofern diese Lizenz beiliegt.
+
+4. BEITRÄGE
+
+   Wer Änderungen (Pull Requests) einreicht, räumt SWISSNAND ein
+   unbefristetes, weltweites, kostenloses Recht ein, diese Beiträge unter
+   beliebigen Lizenzen, auch kommerziellen, zu nutzen.
+
+5. GEWÄHRLEISTUNG UND HAFTUNG
+
+   Die Software wird "wie besehen" ohne jede Gewährleistung zur Verfügung
+   gestellt. Soweit gesetzlich zulässig, ist die Haftung von SWISSNAND für
+   Schäden aller Art, insbesondere Datenverlust, ausgeschlossen. Backups
+   sind regelmässig durch Wiederherstellungstests zu prüfen. Für
+   kommerzielle Lizenzen gelten zusätzlich die jeweiligen Vertragsbedingungen.
+
+6. BEENDIGUNG
+
+   Bei Verletzung dieser Bedingungen erlischt das Nutzungsrecht automatisch.
+
+7. ANWENDBARES RECHT
+
+   Es gilt Schweizer Recht unter Ausschluss des UN-Kaufrechts.
+   Gerichtsstand ist der Sitz von SWISSNAND.

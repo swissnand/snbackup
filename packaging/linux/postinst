@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+mkdir -p /var/lib/snbackup
+chmod 0700 /var/lib/snbackup
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  systemctl enable --now snbackup >/dev/null 2>&1 || true
+  sleep 2
+fi
+echo ""
+echo "  SWISSNAND Backup ist installiert."
+echo "  Web-Konsole:  https://$(hostname -f 2>/dev/null || hostname):8550"
+if [ -f /var/lib/snbackup/initial-admin-password ]; then
+  echo "  Benutzer admin, Startpasswort: $(cat /var/lib/snbackup/initial-admin-password)"
+fi
+echo ""

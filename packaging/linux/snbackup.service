@@ -1,0 +1,25 @@
+[Unit]
+Description=SWISSNAND Backup Server
+Documentation=https://github.com/swissnand/snbackup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/snbackup server --data /var/lib/snbackup --listen :8550
+Restart=on-failure
+RestartSec=10
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
