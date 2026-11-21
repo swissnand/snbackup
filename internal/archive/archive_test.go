@@ -30,7 +30,13 @@ func TestEncryptedArchive(t *testing.T) {
 	if _, err := Extract(out, filepath.Join(d, "ok"), "Archiv-Passwort"); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(filepath.Join(d, "ok", filepath.ToSlash(src)[1:], "a.bin"))
+	var got []byte
+	filepath.Walk(filepath.Join(d, "ok"), func(p string, fi os.FileInfo, err error) error {
+		if err == nil && fi.Name() == "a.bin" {
+			got, _ = os.ReadFile(p)
+		}
+		return nil
+	})
 	if !bytes.Equal(got, data) {
 		t.Fatal("content differs")
 	}
