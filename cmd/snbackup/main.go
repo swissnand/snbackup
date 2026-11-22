@@ -113,6 +113,11 @@ func usage() {
   service uninstall      Dienst entfernen
   user reset <name>      Passwort eines Kontos zurücksetzen (Notfall)
 
+` + bold("Agent (Server steuert diesen Rechner)") + `
+  agent enroll           Beim Backup-Server registrieren (--server, --token, --fingerprint)
+  agent run              Agent starten (läuft im Vordergrund)
+  service install --agent  Agent als Dienst einrichten
+
 ` + bold("Jobs (verwendet die Server-Konfiguration)") + `
   job list               Alle Jobs mit nächstem Lauf anzeigen
   job run <name|id>      Job sofort ausführen (--full für Vollbackup)
@@ -183,6 +188,8 @@ func main() {
 		cmdUser(args)
 	case "service":
 		cmdService(args)
+	case "agent":
+		cmdAgent(args)
 	case "license":
 		cmdLicense(args)
 	case "version", "--version", "-v":

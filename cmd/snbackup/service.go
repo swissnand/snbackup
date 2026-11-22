@@ -44,18 +44,38 @@ func cmdService(args []string) {
 		die(errors.New("service install | uninstall | status"))
 	}
 	fs := flag.NewFlagSet("service", flag.ExitOnError)
-	data := fs.String("data", defaultDataDir(), "Datenverzeichnis")
+	data := fs.String("data", "", "Datenverzeichnis")
 	listen := fs.String("listen", ":8550", "Adresse der Web-Konsole")
+	asAgent := fs.Bool("agent", false, "Agent-Dienst statt Backup-Server einrichten")
 	parse(fs, args[1:])
+	if *data == "" {
+		*data = defaultDataDir()
+		if *asAgent {
+			*data = defaultAgentDir()
+		}
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		die(err)
 	}
 	exe, _ = filepath.EvalSymlinks(exe)
+	if *asAgent && args[0] == "install" {
+		if _, err := os.Stat(filepath.Join(*data, "agent.json")); err != nil {
+			die(errors.New("Agent ist noch nicht registriert – zuerst «snbackup agent enroll …» ausführen"))
+		}
+	}
 	switch runtime.GOOS {
 	case "linux":
+		if *asAgent {
+			linuxAgentService(args[0], exe, *data)
+			return
+		}
 		linuxService(args[0], exe, *data, *listen)
 	case "windows":
+		if *asAgent {
+			windowsAgentService(args[0], exe, *data)
+			return
+		}
 		windowsService(args[0], exe, *data, *listen)
 	default:
 		die(errors.New("Dienstinstallation wird auf diesem System nicht unterstützt"))
@@ -129,6 +149,86 @@ func windowsService(action, exe, data, listen string) {
 	case "uninstall":
 		_ = run("powershell.exe", "-NoProfile", "-Command", fmt.Sprintf(`Stop-ScheduledTask -TaskName '%s' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName '%s' -Confirm:$false`, task, task))
 		fmt.Println(green("✓") + " Dienst entfernt")
+	case "status":
+		_ = run("powershell.exe", "-NoProfile", "-Command", fmt.Sprintf(`Get-ScheduledTask -TaskName '%s' | Get-ScheduledTaskInfo`, task))
+	default:
+		die(errors.New("install | uninstall | status"))
+	}
+}
+
+const systemdAgentUnit = `[Unit]
+Description=SWISSNAND Backup Agent
+Documentation=https://github.com/swissnand/snbackup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%s agent run --data %s
+Restart=always
+RestartSec=10
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+`
+
+func linuxAgentService(action, exe, data string) {
+	unit := "/etc/systemd/system/snbackup-agent.service"
+	switch action {
+	case "install":
+		if os.Geteuid() != 0 {
+			die(errors.New("bitte mit sudo ausführen"))
+		}
+		if err := os.WriteFile(unit, []byte(fmt.Sprintf(systemdAgentUnit, exe, data)), 0o644); err != nil {
+			die(err)
+		}
+		// On agent machines the local web console is not needed.
+		_ = run("systemctl", "disable", "--now", "snbackup")
+		_ = run("systemctl", "daemon-reload")
+		if err := run("systemctl", "enable", "--now", "snbackup-agent"); err != nil {
+			die(err)
+		}
+		fmt.Println(green("✓") + " Agent-Dienst snbackup-agent installiert und gestartet")
+		fmt.Println("  Protokoll: journalctl -u snbackup-agent -f")
+	case "uninstall":
+		_ = run("systemctl", "disable", "--now", "snbackup-agent")
+		_ = os.Remove(unit)
+		_ = run("systemctl", "daemon-reload")
+		fmt.Println(green("✓") + " Agent-Dienst entfernt")
+	case "status":
+		_ = run("systemctl", "status", "snbackup-agent", "--no-pager")
+	default:
+		die(errors.New("install | uninstall | status"))
+	}
+}
+
+func windowsAgentService(action, exe, data string) {
+	const task = `SWISSNAND Backup Agent`
+	switch action {
+	case "install":
+		_ = run("icacls", data, "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "/grant:r", "*S-1-5-32-544:(OI)(CI)F")
+		ps := fmt.Sprintf(`$a = New-ScheduledTaskAction -Execute '%s' -Argument 'agent run --data "%s"';`+
+			`$t = New-ScheduledTaskTrigger -AtStartup;`+
+			`$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable;`+
+			`$p = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest;`+
+			`Register-ScheduledTask -TaskName '%s' -Action $a -Trigger $t -Settings $s -Principal $p -Force | Out-Null;`+
+			`Start-ScheduledTask -TaskName '%s'`, exe, data, task, task)
+		if err := run("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps); err != nil {
+			die(fmt.Errorf("%v (PowerShell als Administrator ausführen)", err))
+		}
+		fmt.Println(green("✓") + " Agent läuft als SYSTEM-Dienst (Autostart) – keine eingehenden Ports nötig")
+	case "uninstall":
+		_ = run("powershell.exe", "-NoProfile", "-Command", fmt.Sprintf(`Stop-ScheduledTask -TaskName '%s' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName '%s' -Confirm:$false`, task, task))
+		fmt.Println(green("✓") + " Agent-Dienst entfernt")
 	case "status":
 		_ = run("powershell.exe", "-NoProfile", "-Command", fmt.Sprintf(`Get-ScheduledTask -TaskName '%s' | Get-ScheduledTaskInfo`, task))
 	default:

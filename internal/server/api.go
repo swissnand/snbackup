@@ -375,6 +375,8 @@ type jobView struct {
 	ScheduleText string     `json:"scheduleText"`
 	Busy         bool       `json:"busy"`
 	RepoName     string     `json:"repoName,omitempty"`
+	AgentName    string     `json:"agentName,omitempty"`
+	AgentOnline  bool       `json:"agentOnline,omitempty"`
 }
 
 func maskJob(j *store.Job) *store.Job {
@@ -395,6 +397,12 @@ func (s *Server) view(j *store.Job) jobView {
 	}
 	if r, ok := s.st.Repo(j.RepoID); ok {
 		v.RepoName = r.Name
+	}
+	if j.AgentID != "" {
+		if a, ok := s.st.Agent(j.AgentID); ok {
+			v.AgentName = a.Name
+			v.AgentOnline = s.m.AgentOnline(a.ID)
+		}
 	}
 	return v
 }
@@ -418,7 +426,7 @@ func (s *Server) handleJobGet(w http.ResponseWriter, r *http.Request, p *princip
 }
 
 var validJobTypes = map[string]bool{"backup": true, "mirror": true, "archive": true, "copy": true, "verify": true, "prune": true}
-var validSources = map[string]bool{"files": true, "postgres": true, "mysql": true, "command": true, "docker": true}
+var validSources = map[string]bool{"files": true, "postgres": true, "mysql": true, "command": true, "docker": true, "proxmox": true, "hyperv": true, "image": true, "sysimage": true}
 
 func (s *Server) validateJob(j *store.Job) error {
 	j.Name = strings.TrimSpace(j.Name)
@@ -427,6 +435,11 @@ func (s *Server) validateJob(j *store.Job) error {
 	}
 	if !validJobTypes[j.Type] {
 		return errors.New("Ungültiger Jobtyp")
+	}
+	if j.AgentID != "" {
+		if _, ok := s.st.Agent(j.AgentID); !ok {
+			return errors.New("Agent nicht gefunden")
+		}
 	}
 	if j.Type == "backup" && !validSources[j.Source.Kind] {
 		return errors.New("Ungültige Quelle")

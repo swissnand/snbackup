@@ -1,0 +1,45 @@
+# SWISSNAND Backup mit Docker Compose
+#   docker compose up -d
+#   Erstes Admin-Passwort: docker compose exec snbackup cat /data/initial-admin-password
+#   Web-Konsole: https://<host>:8550
+services:
+  snbackup:
+    image: ghcr.io/swissnand/snbackup:latest
+    container_name: snbackup
+    restart: unless-stopped
+    ports:
+      - "8550:8550"
+    volumes:
+      - snbackup-data:/data
+      # Beispiel: Backup-Ziel auf dem Host (NAS-Mount, USB-Disk)
+      - /mnt/backup:/repo
+      # Agentenlos sichern: Host-Ordner read-only einbinden
+      - /srv:/sources/srv:ro
+    environment:
+      TZ: Europe/Zurich
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--no-check-certificate", "-O-", "https://127.0.0.1:8550/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional: Agent, der diesen Docker-Host komplett sichert (Dateien, Volumes)
+  # Token und Fingerabdruck in der Web-Konsole unter «Agenten» erzeugen.
+  # snbackup-agent:
+  #   image: ghcr.io/swissnand/snbackup:latest
+  #   command: ["agent", "run"]
+  #   restart: unless-stopped
+  #   hostname: docker-host-01
+  #   volumes:
+  #     - /:/host:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - snbackup-agent:/var/lib/snbackup-agent
+  #   environment:
+  #     SNB_SERVER: https://backup.firma.local:8550
+  #     SNB_ENROLL_TOKEN: snbe_…
+  #     SNB_FINGERPRINT: sha256:…
+  #     SNB_HOST_ROOT: /host
+
+volumes:
+  snbackup-data:
+  # snbackup-agent:

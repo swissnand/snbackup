@@ -1,0 +1,95 @@
+# SWISSNAND Backup – Backup-Server in Kubernetes
+#   kubectl apply -k deploy/kubernetes
+#   Admin-Passwort: kubectl -n snbackup exec deploy/snbackup -- cat /data/initial-admin-password
+#   Zugriff testen:  kubectl -n snbackup port-forward svc/snbackup 8550:8550  → https://localhost:8550
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: snbackup
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: snbackup-data
+  namespace: snbackup
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi        # nur Konfiguration, Verlauf, Protokolle – die Backups liegen im Ziel
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snbackup
+  namespace: snbackup
+  labels: { app.kubernetes.io/name: snbackup }
+spec:
+  replicas: 1             # genau eine Instanz (Planer und Sperren)
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: snbackup }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: snbackup }
+    spec:
+      containers:
+        - name: snbackup
+          image: ghcr.io/swissnand/snbackup:latest
+          args: ["server", "--data", "/data", "--listen", ":8550"]
+          ports:
+            - { name: https, containerPort: 8550 }
+          env:
+            - { name: TZ, value: Europe/Zurich }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: https, scheme: HTTPS }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: https, scheme: HTTPS }
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 2Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: snbackup-data }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: snbackup
+  namespace: snbackup
+spec:
+  selector: { app.kubernetes.io/name: snbackup }
+  ports:
+    - { name: https, port: 8550, targetPort: https }
+---
+# Optional: Ingress (ingress-nginx). Der Server spricht selbst HTTPS.
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: snbackup
+#   namespace: snbackup
+#   annotations:
+#     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+#     nginx.ingress.kubernetes.io/proxy-body-size: "0"
+# spec:
+#   ingressClassName: nginx
+#   tls: [{ hosts: [backup.firma.ch], secretName: snbackup-tls }]
+#   rules:
+#     - host: backup.firma.ch
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend: { service: { name: snbackup, port: { name: https } } }

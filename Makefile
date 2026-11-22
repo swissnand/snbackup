@@ -1,4 +1,4 @@
-VERSION ?= 1.0.0
+VERSION ?= 1.1.0
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 PUBKEY  ?=
 PKG     := github.com/swissnand/snbackup/internal
@@ -26,6 +26,8 @@ dist: clean
 	cd dist/windows-amd64 && zip -qr ../snbackup-windows-amd64.zip .
 	VERSION=$(VERSION) ARCH=amd64 packaging/linux/build-deb.sh
 	VERSION=$(VERSION) ARCH=arm64 packaging/linux/build-deb.sh
+	cp dist/snbackup_$(VERSION)_amd64.deb dist/snbackup_amd64.deb
+	cp dist/snbackup_$(VERSION)_arm64.deb dist/snbackup_arm64.deb
 	cd dist && sha256sum *.tar.gz *.zip *.deb > SHA256SUMS
 
 clean:

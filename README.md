@@ -25,12 +25,15 @@
 - **Sicher ab dem ersten Byte:** Alles wird verschlüsselt, *bevor* es den Server verlässt (AES-256-GCM). Ohne dein Passwort kann niemand die Daten lesen, auch nicht der Speicheranbieter.
 - **Speichersparend:** Dank Deduplizierung auf Blockebene und Kompression sind nach dem ersten Lauf alle weiteren Backups *forever-incremental*. Trotzdem ist jeder Snapshot ein vollständiger Wiederherstellungspunkt.
 - **Einfach bedienbar:** Ein Assistent führt in 8 Schritten zum fertigen Job. Wiederherstellen per Klick im Datei-Browser, einzelne Dateien oder ganze Ordner als ZIP.
-- **Ein einziges Programm:** Keine Datenbank, keine Laufzeitumgebung, keine Abhängigkeiten. Eine Datei für Linux, eine für Windows.
+- **Ein Backup-Server für das ganze Netz:** Agenten auf Linux- und Windows-Servern holen ihre Aufträge verschlüsselt beim Backup-Server ab. Zeitpläne, Verlauf, Wiederherstellung und Meldungen steuerst du zentral.
+- **Ein einziges Programm:** Keine Datenbank, keine Laufzeitumgebung, keine Abhängigkeiten. Eine Datei für Linux, eine für Windows – oder ein Container für Docker und Kubernetes.
 
 ## Funktionen
 
 | Bereich | Möglichkeiten |
 |---|---|
+| **Zentraler Backup-Server** | Agenten für Linux, Windows, Docker und Kubernetes (DaemonSet). Nur ausgehende HTTPS-Verbindungen, Registrierung per Einmal-Token, Zertifikats-Pinning. Jobs pro Rechner zuweisen, live verfolgen, abbrechen, Wiederherstellung direkt auf den Zielrechner. Agentenlos für Netzfreigaben und Datenbanken übers Netz |
+| **VMs & Bare Metal** | **Proxmox VE** (vzdump-Stream, dedupliziert), **Hyper-V** (Export-VM im laufenden Betrieb), **Disk-Images** von Disks und LVM-Volumes (optional per LVM-Snapshot), **Windows Bare Metal** über Windows Server-Sicherung |
 | **Backup-Varianten** | Datei-Backup (forever-incremental), aktives Vollbackup, periodisches Vollbackup (wöchentlich/monatlich), synthetische Vollbackups, **Spiegelung/Sync** mit Papierkorb, **Archiv** (.tar.gz, optional AES-256), **Backup-Kopie 3-2-1** auf ein zweites Ziel, **Integritätsprüfung**, **Bereinigung** |
 | **Quellen** | Ordner & Dateien, **PostgreSQL** (pg_dump/pg_dumpall), **MySQL/MariaDB** (transaktionssicher), **Docker-Volumes** (Container optional stoppen), **beliebige Befehle** als Stream (LDAP, Redis, AD-Export …), **Windows VSS**-Schattenkopien für geöffnete Dateien |
 | **Ziele** | Lokal / USB / **NAS** (NFS, SMB, iSCSI), **S3-kompatibel** (AWS, Wasabi, MinIO, Backblaze B2, Cloudflare R2, Exoscale, Infomaniak), **WebDAV** (Nextcloud, kDrive, Synology), **rclone** (SFTP, OneDrive, Google Drive, Azure, Dropbox und 70+ weitere) |
@@ -61,7 +64,9 @@ Details zum Format und zum Melden von Sicherheitslücken: [SECURITY.md](SECURITY
 
 | | |
 |---|---|
-| ![Jobs](docs/screenshots/03-jobs.png) **Backup-Jobs** | ![Assistent](docs/screenshots/04-assistent-typ.png) **Job-Assistent: 10 Varianten** |
+| ![Agenten](docs/screenshots/16-agenten.png) **Agenten im ganzen Netz** | ![Agent hinzufügen](docs/screenshots/17-agent-hinzufuegen.png) **Agent hinzufügen: Linux, Windows, Docker, Kubernetes** |
+| ![Jobs](docs/screenshots/03-jobs.png) **Backup-Jobs pro Rechner** | ![Assistent](docs/screenshots/04-assistent-typ.png) **Job-Assistent: 14 Varianten** |
+| ![Proxmox](docs/screenshots/04c-assistent-proxmox.png) **Proxmox-VMs über den Agent** | ![Kubernetes](docs/screenshots/17b-agent-kubernetes.png) **Kubernetes-DaemonSet** |
 | ![Zeitplan im Assistenten](docs/screenshots/05-assistent-zeitplan.png) **Zeitplan mit Vorschau** | ![Aufbewahrung](docs/screenshots/05b-assistent-aufbewahrung.png) **GFS-Aufbewahrung** |
 | ![Kalender](docs/screenshots/06-zeitplan.png) **Wochenkalender** | ![Aktivität](docs/screenshots/07-aktivitaet.png) **Live-Fortschritt & Verlauf** |
 | ![Ziele](docs/screenshots/08-ziele.png) **Backup-Ziele** | ![S3](docs/screenshots/08b-ziel-s3.png) **S3 mit Object Lock** |
@@ -91,6 +96,37 @@ sudo snbackup service install          # systemd-Dienst einrichten und starten
 ```
 
 Web-Konsole: **https://&lt;server&gt;:8550**, Benutzer `admin`. Das Startpasswort muss bei der ersten Anmeldung geändert werden.
+
+### Docker
+
+```bash
+docker run -d --name snbackup --restart unless-stopped -p 8550:8550 \
+  -v snbackup-data:/data -v /mnt/backup:/repo ghcr.io/swissnand/snbackup:latest
+docker exec snbackup cat /data/initial-admin-password
+```
+
+Vollständiges Beispiel mit Agent: [deploy/docker/docker-compose.yml](deploy/docker/docker-compose.yml).
+
+### Kubernetes
+
+```bash
+kubectl apply -k https://github.com/swissnand/snbackup/deploy/kubernetes
+kubectl -n snbackup exec deploy/snbackup -- cat /data/initial-admin-password
+```
+
+Server als Deployment mit PVC, Health-Checks und optionalem Ingress; Agent als DaemonSet auf allen Nodes: [deploy/kubernetes](deploy/kubernetes).
+
+### Agenten (Backup-Server steuert weitere Rechner)
+
+In der Web-Konsole unter **Agenten → Agent hinzufügen** erzeugst du die fertigen Installationsbefehle. Für Linux sieht das so aus:
+
+```bash
+sudo apt install ./snbackup_amd64.deb
+sudo snbackup agent enroll --server https://backup01:8550 --token snbe_… --fingerprint sha256:…
+sudo snbackup service install --agent
+```
+
+Windows: `.\install.ps1 -Agent -Server https://backup01:8550 -Token snbe_… -Fingerprint sha256:…`
 
 ### Windows Server (2016 / 2019 / 2022 / 2025)
 
@@ -147,6 +183,7 @@ Jede **kommerzielle Nutzung** braucht eine Lizenz, siehe [LICENSE](LICENSE). Der
 git clone https://github.com/swissnand/snbackup && cd snbackup
 make test        # Tests inkl. Race-Detector
 make dist        # Linux amd64/arm64 + Windows amd64 nach ./dist
+docker build -t snbackup .
 ```
 
 Benötigt nur Go ≥ 1.24.

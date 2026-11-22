@@ -3,6 +3,9 @@
 ## Inhalt
 1. [Begriffe](#begriffe)
 2. [Erste Schritte](#erste-schritte)
+3. [Zentraler Backup-Server und Agenten](#zentraler-backup-server-und-agenten)
+4. [VMs, Disk-Images und Bare Metal](#vms-disk-images-und-bare-metal)
+5. [Docker und Kubernetes](#docker-und-kubernetes)
 3. [Backup-Varianten](#backup-varianten)
 4. [Zeitpläne](#zeitpläne)
 5. [Aufbewahrung (GFS)](#aufbewahrung-gfs)
@@ -30,6 +33,51 @@
 3. **Job erstellen:** *Backup-Jobs → Neuer Job*. Der Assistent führt durch Typ, Quelle, Ziel, Zeitplan, Aufbewahrung, Optionen und Benachrichtigung.
 4. **Testen:** Job mit *Start* ausführen, unter *Aktivität* das Protokoll ansehen und unter *Wiederherstellen* eine Datei herunterladen.
 5. **Absichern:** *Einstellungen → Sicherheit* → 2FA einrichten, E-Mail-Benachrichtigungen konfigurieren.
+
+## Zentraler Backup-Server und Agenten
+
+Ein Backup-Server steuert beliebig viele Rechner. Auf jedem Rechner läuft ein **Agent**: dasselbe Programm `snbackup` im Agent-Modus.
+
+```
+Agent ──HTTPS (ausgehend, alle 5 s)──► Backup-Server :8550
+  ◄── Auftrag: Job + Zugangsdaten zum Ziel
+  ──► Phase, Fortschritt, Protokoll, Ergebnis
+Agent ──Daten (verschlüsselt)──► Ziel (NAS, S3, WebDAV …)
+```
+
+- **Keine offenen Ports auf den Agenten.** Nur der Backup-Server ist auf Port 8550 erreichbar.
+- **Die Daten gehen direkt vom Agent ins Ziel**, nicht über den Backup-Server. Das Ziel muss deshalb vom Agent **und** vom Server aus erreichbar sein (NAS, S3, WebDAV), damit der Server die Snapshots durchsuchen kann.
+- **Registrierung:** Einmal-Token (oder mehrfach verwendbar für Docker/Kubernetes) und der SHA-256-Fingerabdruck des Server-Zertifikats. Jeder Agent bekommt ein eigenes Geheimnis und kann einzeln gesperrt oder entfernt werden.
+- **Zeitpläne, Verlauf, Aufbewahrung und Benachrichtigungen** bleiben auf dem Backup-Server. Ist ein Agent offline, wartet der Auftrag bis zu 30 Minuten und schlägt dann mit «Agent offline» fehl.
+- **Wiederherstellung:** Im Dialog den Zielrechner wählen. Vorausgewählt ist der Rechner, von dem das Backup stammt.
+
+**Mit oder ohne Agent?**
+
+| Situation | Empfehlung |
+|---|---|
+| Linux-/Windows-Server mit lokalen Daten | Agent |
+| Windows mit geöffneten Dateien (VSS), Hyper-V, Bare Metal | Agent (Pflicht) |
+| Proxmox-Host, Disk-Images | Agent auf dem Host |
+| NAS-Freigaben (NFS/SMB) | agentenlos: Freigabe auf dem Backup-Server mounten |
+| Datenbanken | agentenlos übers Netz (Host im Job) oder Agent auf dem DB-Server |
+
+## VMs, Disk-Images und Bare Metal
+
+| Typ | Ablauf | Wiederherstellung |
+|---|---|---|
+| **Proxmox VE** | `vzdump --stdout --compress 0` pro VM/Container, direkt in den Stream. Unkomprimiert, damit die Deduplizierung greift | `snbackup dump <snap> _streams/proxmox/vzdump-qemu-101.vma \| qmrestore - 101`; Container: Datei speichern, `pct restore` |
+| **Hyper-V** | `Export-VM` mit Produktions-Checkpoint in einen festen Zwischenordner, danach Backup und Aufräumen | Ordner wiederherstellen, in Hyper-V «Virtuellen Computer importieren» |
+| **Disk-Image (Linux)** | Block-Geräte oder Image-Dateien, optional per LVM-Snapshot (`lvcreate -s`, danach `lvremove`) | Aus einem Rettungssystem: `snbackup dump <snap> _streams/image/dev-sda.img > /dev/sda` |
+| **Windows Bare Metal** | `wbadmin start backup -allCritical` in einen Zwischenspeicher (Volume oder Freigabe), dann ins Repository | Abbild zurückholen, vom Windows-Setup starten → «Systemimage-Wiederherstellung» |
+
+## Docker und Kubernetes
+
+**Image:** `ghcr.io/swissnand/snbackup` (amd64/arm64). Es enthält pg_dump, mysqldump, rclone und die Docker-CLI.
+
+- **Server:** Daten unter `/data`, Port 8550 (HTTPS), Health-Check `GET /healthz`.
+- **Agent im Container:** `agent run` mit den Variablen `SNB_SERVER`, `SNB_ENROLL_TOKEN`, `SNB_FINGERPRINT` und `SNB_HOST_ROOT=/host`. Das Host-Dateisystem wird nach `/host` gemountet. Gespeichert werden die Originalpfade (`/etc`, nicht `/host/etc`). Für Wiederherstellungen den Mount schreibbar machen.
+- **Kubernetes:** `deploy/kubernetes/server.yaml` (Deployment, PVC, Service, optional Ingress mit `backend-protocol: HTTPS`) und `agent-daemonset.yaml` (ein Agent pro Node, Name = Node-Name, Identität unter `/var/lib/snbackup-agent` auf dem Node).
+- **Ziele im Container** sollten Netzwerkziele sein (S3, WebDAV, NFS-Volume). Ein lokaler Pfad muss in den Container gemountet sein.
 
 ## Backup-Varianten
 
@@ -116,7 +164,8 @@ Prune kann gesperrte Objekte erst nach Ablauf entfernen.
 
 ```
 snbackup server        [--listen :8550] [--data DIR] [--cert F --key F] [--no-tls]
-snbackup service       install|uninstall|status
+snbackup agent         enroll --server URL --token T [--fingerprint F] [--name N] | run [--host-root /host]
+snbackup service       install|uninstall|status [--agent]
 snbackup job           list | run <name> [--full] | history [name]
 snbackup user reset    <name>
 snbackup init          --repo R

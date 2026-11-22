@@ -38,6 +38,7 @@ type RestoreRequest struct {
 	Overwrite  string   `json:"overwrite"`
 	Verify     bool     `json:"verify"`
 	Owner      bool     `json:"restoreOwner"`
+	AgentID    string   `json:"agentId,omitempty"` // restore on this agent
 	User       string   `json:"-"`
 }
 
@@ -45,6 +46,9 @@ type RestoreRequest struct {
 func (m *Manager) Restore(req RestoreRequest) (string, error) {
 	if req.SnapshotID == "" {
 		return "", errors.New("Snapshot fehlt")
+	}
+	if req.AgentID != "" {
+		return m.dispatchRestore(req)
 	}
 	key := "restore-" + secure.RandomToken(6)
 	run := store.Run{ID: secure.RandomToken(9), JobID: key, JobName: "Wiederherstellung " + req.SnapshotID[:min(8, len(req.SnapshotID))], JobType: "restore", Trigger: "manual:" + req.User, Start: time.Now(), Status: "running", Attempt: 1}
@@ -79,6 +83,9 @@ func (m *Manager) Restore(req RestoreRequest) (string, error) {
 			target := req.Target
 			if target == "" {
 				rc.log("warn", "Wiederherstellung an den ursprünglichen Ort")
+			}
+			if m.HostRoot != "" {
+				target = filepath.Join(m.HostRoot, target)
 			}
 			rc.phase("Dateien wiederherstellen")
 			res, err := r.Restore(ctx, s, repo.RestoreOptions{Target: target, Include: req.Include, Overwrite: req.Overwrite, Verify: req.Verify, RestoreOwner: req.Owner, Progress: rc.progress, Log: rc.log})

@@ -56,6 +56,9 @@ const P = {
   cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   power: '<path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"/>',
+  agent: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><circle cx="12" cy="10" r="2"/>',
+  vm: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M7 8h4M7 12h10"/>',
+  disk: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 3v3"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 };
 const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${P[n] || P.info}</svg>`;
@@ -109,6 +112,10 @@ const TYPES = {
   mysql: { t: 'backup', k: 'mysql', icon: 'db', label: 'MySQL / MariaDB', desc: 'Transaktionssichere Dumps inkl. Routinen, Trigger und Events.' },
   docker: { t: 'backup', k: 'docker', icon: 'box', label: 'Docker-Volumes', desc: 'Volumes sichern, Container optional kurz stoppen.' },
   command: { t: 'backup', k: 'command', icon: 'term', label: 'Befehl / Stream', desc: 'Ausgabe beliebiger Programme sichern (z. B. LDAP, Redis, Exporte).' },
+  proxmox: { t: 'backup', k: 'proxmox', icon: 'vm', label: 'Proxmox VE', desc: 'VMs und Container per vzdump, dedupliziert und verschlüsselt.' },
+  hyperv: { t: 'backup', k: 'hyperv', icon: 'vm', label: 'Hyper-V', desc: 'VMs im laufenden Betrieb exportieren (Agent auf dem Host).' },
+  image: { t: 'backup', k: 'image', icon: 'disk', label: 'Disk-Image', desc: 'Ganze Disks oder LVM-Volumes blockweise, optional per LVM-Snapshot.' },
+  sysimage: { t: 'backup', k: 'sysimage', icon: 'shield', label: 'Windows Bare Metal', desc: 'Bootfähiges Systemabbild via Windows Server-Sicherung.' },
   mirror: { t: 'mirror', icon: 'mirror', label: 'Spiegelung (Sync)', desc: '1:1-Kopie auf NAS oder USB-Disk, optional mit Papierkorb.' },
   archive: { t: 'archive', icon: 'archive', label: 'Archiv', desc: 'Eigenständige .tar.gz-Datei, optional AES-256-verschlüsselt.' },
   copy: { t: 'copy', icon: 'layers', label: 'Backup-Kopie (3-2-1)', desc: 'Snapshots auf ein zweites Ziel kopieren, z. B. Offsite/Cloud.' },
@@ -215,6 +222,7 @@ const NAV = [
   ['targets', 'Backup-Ziele', 'db'],
   ['restore', 'Wiederherstellen', 'restore'],
   ['activity', 'Aktivität', 'activity'],
+  ['agents', 'Agenten', 'agent'],
 ];
 const logo = '<img class="logo" src="/logo.svg" alt="">';
 const brand = `<div class="brand">${logo}<div class="wm"><b>SWISSNAND</b><span><em>Backup</em> · Tools</span></div></div>`;
@@ -252,7 +260,7 @@ async function route() {
   const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
   const [r, ...rest] = h.split('/');
   shell(r);
-  const fn = { dashboard: pgDashboard, jobs: pgJobs, schedule: pgSchedule, targets: pgTargets, restore: pgRestore, activity: pgActivity, settings: pgSettings }[r] || pgDashboard;
+  const fn = { dashboard: pgDashboard, jobs: pgJobs, schedule: pgSchedule, targets: pgTargets, restore: pgRestore, activity: pgActivity, agents: pgAgents, settings: pgSettings }[r] || pgDashboard;
   try { await fn(rest); } catch (e) { if (e.message !== 'Nicht angemeldet') page().innerHTML = `<div class="alert err">${icon('alert')}${esc(e.message)}</div>`; }
 }
 window.addEventListener('hashchange', route);
@@ -440,7 +448,7 @@ async function pgJobs() {
       <span class="muted">${jobs.filter((j) => j.enabled).length} aktiv · ${jobs.length} total</span></div>
       <div class="card"><table class="t"><thead><tr><th>Job</th><th>Ziel</th><th>Zeitplan</th><th>Letzter Lauf</th><th>Nächster Lauf</th><th>Status</th><th></th></tr></thead><tbody>
       ${f.map((j) => { const t = typeOf(j); return `<tr class="click" data-act="job-detail" data-id="${j.id}">
-        <td><div class="t-name"><div class="typeicon">${icon(t.icon)}</div><div><b>${esc(j.name)}</b><span>${t.label}${j.options?.tags?.length ? ' · ' + j.options.tags.map(esc).join(', ') : ''}</span></div></div></td>
+        <td><div class="t-name"><div class="typeicon">${icon(t.icon)}</div><div><b>${esc(j.name)}</b><span>${t.label} · ${j.agentName ? `${icon('agent', 'sm')} ${esc(j.agentName)}${j.agentOnline ? '' : ' <span style="color:var(--warn)">(offline)</span>'}` : 'Backup-Server'}${j.options?.tags?.length ? ' · ' + j.options.tags.map(esc).join(', ') : ''}</span></div></div></td>
         <td>${esc(j.repoName || j.targetPath || '–')}</td>
         <td><span class="${j.enabled ? '' : 'muted'}">${esc(j.scheduleText)}</span></td>
         <td>${j.lastRun ? dt(j.lastRun) + `<div class="muted" style="font-size:12px">${rel(j.lastRun)}</div>` : '<span class="muted">–</span>'}</td>
@@ -512,7 +520,9 @@ const DEFAULT_JOB = () => ({
 });
 
 async function openJobWizard(id, preset) {
-  const [repos, jobs] = await Promise.all([GET('/api/repos'), GET('/api/jobs')]);
+  const [repos, jobs, ag] = await Promise.all([GET('/api/repos'), GET('/api/jobs'), GET('/api/agents')]);
+  const agents = (ag.agents || []).filter((a) => !a.agent.disabled);
+  const runOn = () => `<div class="section"><h4>${icon('agent', 'sm')}Ausführen auf</h4>${agents.length ? field('Rechner', sel(job, 'agentId', [['', 'Backup-Server selbst (agentenlos)'], ...agents.map((a) => [a.agent.id, a.agent.name + ' · ' + a.agent.os + (a.online ? '' : ' (offline)')])]), 'Agentenlos: Netzfreigaben (NFS/SMB) und Datenbanken übers Netz. Mit Agent: lokale Dateien, VSS, VMs, Disk-Images auf diesem Rechner.') : `<p class="muted" style="margin-top:0">Der Job läuft auf dem Backup-Server. Für andere Rechner zuerst unter <a href="#/agents" data-close>Agenten</a> einen Agent installieren.</p>`}</div>`;
   let job = DEFAULT_JOB();
   if (id) { const r = await GET('/api/jobs/' + id); job = r.job; }
   else if (preset && TYPES[preset]) { job.type = TYPES[preset].t; if (TYPES[preset].k) job.source.kind = TYPES[preset].k; }
@@ -541,8 +551,29 @@ async function openJobWizard(id, preset) {
       <div class="types">${Object.entries(TYPES).map(([k, t]) => `<div class="type ${k === typeKey ? 'on' : ''}" data-type="${k}"><div class="typeicon">${icon(t.icon)}</div><b>${t.label}</b><span>${t.desc}</span>${k === 'files' ? '<span class="badge brand tag">Empfohlen</span>' : ''}</div>`).join('')}</div>`,
     Quelle: () => {
       const k = job.source.kind;
+      if (job.type === 'backup' && k === 'proxmox') {
+        return runOn() + `<h2>Proxmox VE</h2><p class="lead">Der Job muss auf dem Proxmox-Host laufen (Agent installieren). vzdump streamt jede VM unkomprimiert – dadurch funktioniert die Deduplizierung zwischen den Läufen.</p>
+        <div class="section">${field('VM- und Container-IDs (eine pro Zeile)', area(job, 'source.vmIds', '100\n101\nall', 4), '«all» = alle VMs und Container des Hosts')}${field('vzdump-Modus', sel(job, 'source.vzdumpMode', [['snapshot', 'Snapshot (ohne Unterbruch)'], ['suspend', 'Suspend (kurz pausieren)'], ['stop', 'Stop (maximal konsistent)']], 'snapshot'))}</div>
+        <div class="preview-box">${icon('restore', 'sm')} Wiederherstellen: <span class="kbd">snbackup dump &lt;snapshot&gt; _streams/proxmox/vzdump-qemu-101.vma | qmrestore - 101</span></div>`;
+      }
+      if (job.type === 'backup' && k === 'hyperv') {
+        return runOn() + `<h2>Hyper-V</h2><p class="lead">Export-VM mit Produktions-Checkpoint: die VM läuft weiter. Der Agent muss auf dem Hyper-V-Host laufen.</p>
+        <div class="section">${field('VM-Namen (einer pro Zeile)', area(job, 'source.hypervVMs', 'DC01\nSQL01\nFileserver', 4))}</div>
+        <div class="preview-box">${icon('restore', 'sm')} Wiederherstellen: Ordner der VM zurückholen und in Hyper-V mit «Virtuellen Computer importieren» einbinden.</div>`;
+      }
+      if (job.type === 'backup' && k === 'image') {
+        return runOn() + `<h2>Disk-Image</h2><p class="lead">Sichert ganze Disks, Partitionen oder LVM-Volumes Block für Block – für eine komplette Wiederherstellung eines Linux-Servers.</p>
+        <div class="section">${field('Geräte (eines pro Zeile)', area(job, 'source.devices', '/dev/sda\n/dev/vg0/root', 3), 'Auch Image-Dateien möglich, z. B. /var/lib/libvirt/images/vm1.qcow2 (VM vorher anhalten)')}
+        ${chk(job, 'source.lvmSnapshot', 'LVM-Snapshot verwenden', 'Konsistentes Abbild im laufenden Betrieb, Snapshot wird danach entfernt')}</div>
+        <div class="preview-box">${icon('restore', 'sm')} Bare-Metal-Restore aus einem Rettungssystem: <span class="kbd">snbackup dump &lt;snapshot&gt; _streams/image/dev-sda.img &gt; /dev/sda</span></div>`;
+      }
+      if (job.type === 'backup' && k === 'sysimage') {
+        return runOn() + `<h2>Windows Bare Metal</h2><p class="lead">Erstellt mit der Windows Server-Sicherung (wbadmin) ein bootfähiges Systemabbild und sichert es verschlüsselt ins Ziel.</p>
+        <div class="section">${field('Zwischenspeicher für wbadmin', inp(job, 'targetPath', { ph: 'E:   oder   \\\\nas\\wbadmin' }), 'Eigenes Volume oder Netzfreigabe, nicht das Systemlaufwerk')}${field('Umfang', inp(job, 'source.sysVolumes', { ph: '-allCritical (Standard: alles für Bare Metal)' }), 'Oder Laufwerke, z. B. C:,D:')}</div>
+        <div class="preview-box">${icon('restore', 'sm')} Wiederherstellen: Abbild zurückholen, vom Windows-Setup-Medium starten, «Computerreparaturoptionen → Systemimage-Wiederherstellung».</div>`;
+      }
       if (job.type === 'backup' && (k === 'postgres' || k === 'mysql')) {
-        return `<h2>${k === 'postgres' ? 'PostgreSQL' : 'MySQL / MariaDB'}</h2><p class="lead">Die Dumps werden als Stream direkt verschlüsselt ins Ziel geschrieben – keine temporären Dateien.</p>
+        return runOn() + `<h2>${k === 'postgres' ? 'PostgreSQL' : 'MySQL / MariaDB'}</h2><p class="lead">Die Dumps werden als Stream direkt verschlüsselt ins Ziel geschrieben – keine temporären Dateien.</p>
         <div class="section"><h4>${icon('server', 'sm')}Verbindung</h4><div class="row r3">${field('Host', inp(job, 'source.dbHost', { ph: 'localhost' }))}${field('Port', inp(job, 'source.dbPort', { type: 'number', ph: k === 'postgres' ? '5432' : '3306' }))}${field('Benutzer', inp(job, 'source.dbUser', { ph: k === 'postgres' ? 'postgres' : 'root' }))}</div>
         <div class="row">${field('Passwort', `<input type="password" name="source.dbPassword" value="${esc(job.source.dbPassword || '')}" autocomplete="new-password" placeholder="wird verschlüsselt gespeichert">`)}${field('Docker-Container (optional)', inp(job, 'source.dockerContainer', { ph: 'z. B. postgres-db' }), 'Dump wird mit docker exec im Container ausgeführt')}</div></div>
         <div class="section"><h4>${icon('db', 'sm')}Datenbanken</h4>${chk(job, 'source.allDatabases', 'Alle Datenbanken sichern', k === 'postgres' ? 'pg_dumpall inkl. Rollen und Tablespaces' : '--all-databases')}
@@ -550,15 +581,15 @@ async function openJobWizard(id, preset) {
         ${field('Zusätzliche Argumente', inp(job, 'source.dumpArgs', { ph: k === 'postgres' ? '--no-owner' : '--column-statistics=0' }))}</div>`;
       }
       if (job.type === 'backup' && k === 'docker') {
-        return `<h2>Docker-Volumes</h2><p class="lead">Sichert benannte Volumes. Für Datenbanken in Containern besser den Datenbank-Typ verwenden.</p>
+        return runOn() + `<h2>Docker-Volumes</h2><p class="lead">Sichert benannte Volumes. Für Datenbanken in Containern besser den Datenbank-Typ verwenden.</p>
         <div class="section">${field('Volumes (eine pro Zeile)', area(job, 'source.dockerVolumes', 'nextcloud_data\ngitea_data'))}${field('Container während des Backups stoppen', area(job, 'source.stopContainers', 'nextcloud\ngitea', 2), 'Werden danach automatisch wieder gestartet')}${field('Zusätzliche Pfade', area(job, 'source.paths', '/opt/stacks', 2))}</div>
         <div class="section">${field('Ausschlüsse', area(job, 'source.excludes', '*.log', 3))}</div>`;
       }
       if (job.type === 'backup' && k === 'command') {
-        return `<h2>Befehl / Stream</h2><p class="lead">Die Standardausgabe des Befehls wird als Datei gesichert. Exit-Code ≠ 0 lässt den Job fehlschlagen.</p>
+        return runOn() + `<h2>Befehl / Stream</h2><p class="lead">Die Standardausgabe des Befehls wird als Datei gesichert. Exit-Code ≠ 0 lässt den Job fehlschlagen.</p>
         <div class="section">${field('Befehl', inp(job, 'source.command', { ph: 'slapcat -n 1   |   redis-cli --rdb -   |   Get-ADUser -Filter * | ConvertTo-Json' }), 'Linux: /bin/sh -c · Windows: PowerShell')}${field('Dateiname im Backup', inp(job, 'source.commandName', { ph: 'ldap.ldif' }))}${field('Zusätzliche Pfade', area(job, 'source.paths', '/etc/openldap', 2))}</div>`;
       }
-      return `<h2>Quellen</h2><p class="lead">Ordner und Dateien, die gesichert werden. Ein Pfad pro Zeile – lokale Laufwerke, gemountete Freigaben oder UNC-Pfade.</p>
+      return runOn() + `<h2>Quellen</h2><p class="lead">Ordner und Dateien, die gesichert werden. Ein Pfad pro Zeile – lokale Laufwerke, gemountete Freigaben oder UNC-Pfade.</p>
         <div class="section"><h4>${icon('folder', 'sm')}Pfade</h4>${field('Quellpfade', area(job, 'source.paths', '/etc\n/home\n/var/www\nC:\\Users\nD:\\Daten', 5))}
         <div class="preset-row">${[['Linux-Server', '/etc\n/home\n/root\n/var/www\n/opt\n/srv'], ['Windows-Server', 'C:\\Users\nC:\\inetpub\nD:\\Daten'], ['Webserver', '/var/www\n/etc/nginx\n/etc/letsencrypt']].map(([l, v]) => `<button type="button" class="btn sm" data-fill="source.paths" data-val="${esc(v)}">${icon('plus', 'sm')}${l}</button>`).join('')}</div></div>
         <div class="section"><h4>${icon('x', 'sm')}Ausschlüsse</h4>${field('Muster (eines pro Zeile)', area(job, 'source.excludes', '*.tmp\nnode_modules\n/var/log/**\n**/cache', 5), '<span class="kbd">*.iso</span> Dateiname · <span class="kbd">node_modules</span> Ordner überall · <span class="kbd">/var/log/**</span> ganzer Pfad · <span class="kbd">**/cache</span> beliebige Tiefe')}
@@ -859,12 +890,15 @@ async function pgRestore(args) {
   await draw();
 }
 
-function restoreDialog(repoId, snap, include) {
+async function restoreDialog(repoId, snap, include) {
   const isAdmin = S.me.role === 'admin';
+  let agents = [];
+  try { agents = ((await GET('/api/agents')).agents || []).filter((a) => !a.agent.disabled); } catch (e) { agents = []; }
+  const match = agents.find((a) => a.agent.hostname === snap.host);
   const m = modal({
     title: 'Wiederherstellen', icon: 'restore',
     body: `<div class="alert info">${icon('info')}<div>Snapshot vom <b>${dt(snap.time, true)}</b> · ${include.length ? include.length + ' ausgewählte Einträge' : 'kompletter Snapshot (' + snap.stats.files + ' Dateien, ' + bytes(snap.stats.bytes) + ')'}</div></div>
-    <form id="rsf"><div class="field"><label>Wohin?</label><div class="chips"><label class="chip"><input type="radio" name="where" value="alt" checked><span>Anderer Ordner (sicher)</span></label>${isAdmin ? '<label class="chip"><input type="radio" name="where" value="orig"><span>Originalort</span></label>' : ''}</div></div>
+    <form id="rsf">${agents.length ? field('Auf welchem Rechner?', `<select name="agentId"><option value="">Backup-Server</option>${agents.map((a) => `<option value="${a.agent.id}"${match && match.agent.id === a.agent.id ? ' selected' : ''}>${esc(a.agent.name)}${a.online ? '' : ' (offline)'}</option>`).join('')}</select>`, match ? 'Vorausgewählt: der Rechner, von dem das Backup stammt' : '') : ''}<div class="field"><label>Wohin?</label><div class="chips"><label class="chip"><input type="radio" name="where" value="alt" checked><span>Anderer Ordner (sicher)</span></label>${isAdmin ? '<label class="chip"><input type="radio" name="where" value="orig"><span>Originalort</span></label>' : ''}</div></div>
     <div class="field" id="tgt"><label>Zielordner</label><input type="text" name="target" value="${esc(snap.os === 'windows' ? 'C:\\Restore\\' + snap.id.slice(0, 8) : '/tmp/restore-' + snap.id.slice(0, 8))}"><div class="hint">Die ursprüngliche Ordnerstruktur wird darunter angelegt.</div></div>
     <div class="field"><label>Wenn die Datei schon existiert</label><select name="overwrite"><option value="rename">Umbenennen (.restored-1)</option><option value="always">Überschreiben</option><option value="newer">Nur wenn Backup neuer</option><option value="never">Überspringen</option></select></div>
     <label class="check"><input type="checkbox" name="verify" checked><div><b>Prüfsummen kontrollieren</b><span>SHA-256 jeder Datei nach dem Schreiben verifizieren</span></div></label>
@@ -876,7 +910,7 @@ function restoreDialog(repoId, snap, include) {
     const f = readForm($('#rsf', m.el));
     if (f.where === 'orig' && !(await confirmDlg('Dateien am Originalort werden je nach Einstellung überschrieben. Fortfahren?', 'Ja, wiederherstellen', true))) return;
     try {
-      await POST('/api/restore', { repoId, snapshotId: snap.id, include, target: f.where === 'orig' ? '' : f.target, overwrite: f.overwrite, verify: f.verify, restoreOwner: f.restoreOwner });
+      await POST('/api/restore', { repoId, snapshotId: snap.id, include, target: f.where === 'orig' ? '' : f.target, overwrite: f.overwrite, verify: f.verify, restoreOwner: f.restoreOwner, agentId: f.agentId || '' });
       toast('Wiederherstellung gestartet'); m.close(); location.hash = '#/activity';
     } catch (e) { fail(e); }
   };
@@ -895,7 +929,7 @@ async function pgActivity() {
     <div class="toolbar"><div class="seg">${[['', 'Alle'], ['success', 'Erfolgreich'], ['warning', 'Warnungen'], ['failed', 'Fehler'], ['cancelled', 'Abgebrochen']].map(([v, l]) => `<button data-s="${v}" class="${status === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="card"><table class="t"><thead><tr><th>Job</th><th>Start</th><th>Dauer</th><th>Dateien</th><th>Neu / Übertragen</th><th>Ergebnis</th><th>Status</th></tr></thead><tbody>
     ${(runs || []).filter((r) => r.status !== 'running').map((r) => { const t = TYPES[r.jobType] || (r.jobType === 'restore' ? { icon: 'restore', label: 'Wiederherstellung' } : TYPES.files); return `<tr class="click" data-act="log" data-id="${r.id}" data-title="${esc(r.jobName)}">
-      <td><div class="t-name"><div class="typeicon">${icon(t.icon)}</div><div><b>${esc(r.jobName)}</b><span>${esc(r.trigger)}${r.attempt > 1 ? ' · Versuch ' + r.attempt : ''}</span></div></div></td>
+      <td><div class="t-name"><div class="typeicon">${icon(t.icon)}</div><div><b>${esc(r.jobName)}</b><span>${esc(r.trigger)}${r.agent ? ' · ' + esc(r.agent) : ''}${r.attempt > 1 ? ' · Versuch ' + r.attempt : ''}</span></div></div></td>
       <td>${dt(r.start, true)}</td><td>${r.end ? dur(new Date(r.end) - new Date(r.start)) : '–'}</td><td>${r.stats ? r.stats.files : '–'}</td>
       <td>${r.stats ? bytes(r.stats.newBytes) + ' / ' + bytes(r.stats.storedBytes) : '–'}</td><td class="muted" style="max-width:340px">${esc(r.message || '')}</td><td>${statusBadge(r.status)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:30px">Keine Einträge</td></tr>'}
     </tbody></table></div>`;
@@ -903,6 +937,82 @@ async function pgActivity() {
   };
   await render();
   every(3000, () => render().catch(() => {}));
+}
+
+
+/* ------------------------------------------------------------------ agents */
+const OSL = { linux: 'Linux', windows: 'Windows', darwin: 'macOS' };
+async function pgAgents() {
+  setTitle('Agenten', 'Rechner, die dieser Backup-Server sichert');
+  const admin = S.me.role === 'admin';
+  $('#topact').innerHTML = admin ? `<button class="btn primary" id="addag">${icon('plus')}Agent hinzufügen</button>` : '';
+  if (admin) $('#addag').onclick = () => openEnroll();
+  const render = async () => {
+    const d = await GET('/api/agents');
+    const list = d.agents || [];
+    const on = list.filter((a) => a.online).length;
+    page().innerHTML = `
+    <div class="grid g4 mb">
+      <div class="card kpi"><div class="lbl"><span class="ic">${icon('agent')}</span>Agenten</div><div class="val">${list.length}</div><div class="foot">registriert</div></div>
+      <div class="card kpi"><div class="lbl"><span class="ic">${icon('activity')}</span>Online</div><div class="val">${on}<small>/ ${list.length}</small></div><div class="foot">${list.length - on ? `<span class="badge warn">${list.length - on} offline</span>` : '<span class="badge ok"><span class="d"></span>alle erreichbar</span>'}</div></div>
+      <div class="card kpi"><div class="lbl"><span class="ic">${icon('jobs')}</span>Jobs auf Agenten</div><div class="val">${list.reduce((a, x) => a + x.jobs, 0)}</div><div class="foot">${list.reduce((a, x) => a + x.running, 0)} laufen gerade</div></div>
+      <div class="card kpi"><div class="lbl"><span class="ic">${icon('lock')}</span>Verbindung</div><div class="val" style="font-size:20px;margin-top:16px">HTTPS, ausgehend</div><div class="foot">Agenten brauchen keine offenen Ports</div></div>
+    </div>
+    ${list.length ? `<div class="card"><table class="t"><thead><tr><th>Agent</th><th>System</th><th>Version</th><th>IP</th><th>Zuletzt gesehen</th><th>Jobs</th><th>Status</th><th></th></tr></thead><tbody>
+    ${list.map(({ agent: a, online, running, jobs }) => `<tr><td><div class="t-name"><div class="typeicon">${icon(a.os === 'windows' ? 'vm' : 'server')}</div><div><b>${esc(a.name)}</b><span>${esc(a.hostname)}</span></div></div></td>
+      <td>${OSL[a.os] || esc(a.os)} · ${esc(a.arch)}</td><td class="muted">v${esc(a.version)}</td><td class="mono muted">${esc(a.ip || '')}</td><td class="muted">${a.lastSeen ? rel(a.lastSeen) : 'nie'}</td>
+      <td>${jobs}${running ? ` <span class="badge run"><span class="d"></span>${running} aktiv</span>` : ''}</td>
+      <td>${a.disabled ? '<span class="badge err">gesperrt</span>' : online ? '<span class="badge ok"><span class="d"></span>Online</span>' : '<span class="badge warn">Offline</span>'}</td>
+      <td><div class="actions">${admin ? `<button class="btn sm icon" data-ae="${a.id}" title="Bearbeiten">${icon('edit', 'sm')}</button><button class="btn sm icon danger" data-ad="${a.id}" title="Entfernen">${icon('trash', 'sm')}</button>` : ''}</div></td></tr>`).join('')}
+    </tbody></table></div>` : `<div class="card"><div class="empty"><div class="ill">${icon('agent', 'lg')}</div><h3>Noch keine Agenten</h3><p>Installiere den Agent auf den Servern, die du sichern willst. Er meldet sich verschlüsselt beim Backup-Server und holt seine Aufträge ab.</p>${admin ? `<button class="btn primary" id="add2">${icon('plus')}Agent hinzufügen</button>` : ''}</div></div>`}
+    <div class="grid g3 mt">
+      <div class="card pad"><div class="typeicon mb">${icon('server')}</div><b>Agentenlos</b><p class="muted" style="font-size:13px;margin-bottom:0">Der Backup-Server sichert selbst: gemountete NFS/SMB-Freigaben, Datenbanken übers Netz, Docker-Volumes auf dem eigenen Host.</p></div>
+      <div class="card pad"><div class="typeicon mb">${icon('agent')}</div><b>Mit Agent</b><p class="muted" style="font-size:13px;margin-bottom:0">Nötig für lokale Dateien mit Rechten, Windows VSS, Hyper-V, Proxmox, Disk-Images und Bare Metal. Zeitplan, Verlauf und Meldungen bleiben zentral.</p></div>
+      <div class="card pad"><div class="typeicon mb">${icon('shield')}</div><b>Sicher verbunden</b><p class="muted" style="font-size:13px;margin-bottom:0">Einmal-Token zur Registrierung, Zertifikats-Pinning, eigenes Geheimnis pro Agent. Agenten lassen sich jederzeit sperren.</p></div>
+    </div>`;
+    const a2 = $('#add2');
+    if (a2) a2.onclick = () => openEnroll();
+    $$('[data-ae]').forEach((b) => b.onclick = () => {
+      const a = list.find((x) => x.agent.id === b.dataset.ae).agent;
+      const m = modal({ title: 'Agent bearbeiten', icon: 'agent', body: `<form id="af">${field('Name', `<input type="text" name="name" value="${esc(a.name)}">`)}${field('Tags', inp(a, 'tags', { data: 'csv', ph: 'produktion, dmz' }))}${chk(a, 'disabled', 'Agent sperren', 'Gesperrte Agenten erhalten keine Aufträge mehr')}</form>`, foot: `<button class="btn" data-close>Abbrechen</button><button class="btn primary" id="as">Speichern</button>` });
+      $('#as', m.el).onclick = async () => { try { await PUT('/api/agents/' + a.id, readForm($('#af', m.el))); toast('Agent gespeichert'); m.close(); render(); } catch (e) { fail(e); } };
+    });
+    $$('[data-ad]').forEach((b) => b.onclick = async () => { if (await confirmDlg('Agent entfernen? Er kann sich danach nicht mehr verbinden.', 'Entfernen', true)) { try { await DEL('/api/agents/' + b.dataset.ad); toast('Agent entfernt'); render(); } catch (e) { fail(e); } } });
+  };
+  await render();
+  every(5000, () => render().catch(() => {}));
+}
+
+function openEnroll() {
+  const m = modal({ title: 'Agent hinzufügen', icon: 'agent', size: 'wide', body: `<form id="ef"><div class="row">${field('Bezeichnung', '<input type="text" name="name" placeholder="z. B. Webserver, Hyper-V-Host">')}${field('Gültig (Stunden)', '<input type="number" name="hours" data-type="int" value="24" min="1">')}</div>
+    ${chk({}, 'reuse', 'Mehrfach verwendbar', 'Für Docker, Kubernetes-DaemonSets oder das Ausrollen auf viele Server (jeder Rechner erhält trotzdem ein eigenes Geheimnis)')}
+    ${field('Adresse des Backup-Servers (aus Sicht des Agenten)', `<input type="text" name="server" value="${esc(location.origin)}">`)}</form><div id="eout"></div>`,
+    foot: `<button class="btn" data-close>Schliessen</button><button class="btn primary" id="eg">${icon('key', 'sm')}Installationsbefehle erzeugen</button>` });
+  $('#eg', m.el).onclick = async () => {
+    const f = readForm($('#ef', m.el));
+    let r;
+    try { r = await POST('/api/agents/enroll-token', { name: f.name, hours: f.hours, reuse: f.reuse }); } catch (e) { fail(e); return; }
+    const srv = f.server.replace(/\/$/, '');
+    const fp = r.fingerprint || '';
+    const fpArg = fp ? ` --fingerprint ${fp}` : '';
+    const rel = 'https://github.com/swissnand/snbackup/releases/latest/download';
+    const cmds = {
+      Linux: `curl -fsSLO ${rel}/snbackup_amd64.deb\nsudo apt install ./snbackup_amd64.deb\nsudo snbackup agent enroll --server ${srv} --token ${r.token}${fpArg}\nsudo snbackup service install --agent`,
+      Windows: `# PowerShell als Administrator\nInvoke-WebRequest ${rel}/snbackup-windows-amd64.zip -OutFile snbackup.zip\nExpand-Archive snbackup.zip snbackup; cd snbackup\n.\\install.ps1 -Agent -Server ${srv} -Token ${r.token}${fp ? ' -Fingerprint ' + fp : ''}`,
+      Docker: `docker run -d --name snbackup-agent --restart unless-stopped --hostname $(hostname) \\\n  -v /:/host:ro -v snbackup-agent:/var/lib/snbackup-agent \\\n  -e SNB_SERVER=${srv} -e SNB_ENROLL_TOKEN=${r.token} \\\n  ${fp ? `-e SNB_FINGERPRINT=${fp} ` : ''}-e SNB_HOST_ROOT=/host \\\n  ghcr.io/swissnand/snbackup:latest agent run`,
+      Kubernetes: `kubectl create namespace snbackup\nkubectl -n snbackup create secret generic snbackup-agent \\\n  --from-literal=server=${srv} --from-literal=token=${r.token} --from-literal=fingerprint=${fp}\nkubectl apply -f https://raw.githubusercontent.com/swissnand/snbackup/main/deploy/kubernetes/agent-daemonset.yaml`,
+    };
+    let tab = 'Linux';
+    const draw = () => {
+      $('#eout', m.el).innerHTML = `<div class="alert ${r.fingerprint ? 'ok' : 'warn'}">${icon(r.fingerprint ? 'lock' : 'alert')}<div>${r.fingerprint ? 'Der Agent prüft das Zertifikat des Servers über den Fingerabdruck – keine Warnung, kein Man-in-the-Middle.' : 'Kein Fingerabdruck verfügbar – der Agent prüft das Zertifikat über die Zertifizierungsstellen des Systems.'} Token gültig bis ${dt(r.expires, true)}${f.reuse ? ', mehrfach verwendbar' : ', einmalig'}.</div></div>
+      <div class="seg mb">${Object.keys(cmds).map((k) => `<button data-t="${k}" class="${k === tab ? 'on' : ''}">${k}</button>`).join('')}</div>
+      <div class="log" id="cmdbox" style="max-height:none">${esc(cmds[tab])}</div><div class="flex mt"><button class="btn sm" id="cp">${icon('copy', 'sm')}Kopieren</button><span class="muted" style="font-size:12.5px">Der Agent erscheint nach wenigen Sekunden in der Liste.</span></div>`;
+      $$('[data-t]', m.el).forEach((b) => b.onclick = () => { tab = b.dataset.t; draw(); });
+      $('#cp', m.el).onclick = async () => { try { await navigator.clipboard.writeText(cmds[tab]); toast('Kopiert'); } catch (e) { toast('Bitte manuell kopieren', 'err'); } };
+    };
+    draw();
+    $('#eg', m.el).remove();
+  };
 }
 
 /* ------------------------------------------------------------------ settings */

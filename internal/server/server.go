@@ -55,6 +55,8 @@ type Server struct {
 	trees    *treeCache
 	usageMu  sync.Mutex
 	usage    map[string]repoUsage
+	// fingerprint of the TLS certificate, shown to admins for agent pinning
+	fingerprint string
 }
 
 type repoUsage struct {
@@ -112,6 +114,7 @@ func (s *Server) Run(ctx context.Context) error {
 	static := http.FileServer(http.FS(sub))
 	mux := http.NewServeMux()
 	s.routes(mux)
+	s.agentRoutes(mux)
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			jsonErr(w, http.StatusNotFound, "not found")
@@ -160,6 +163,7 @@ func (s *Server) Run(ctx context.Context) error {
 			return err
 		}
 	}
+	s.fingerprint = fingerprintOf(cert)
 	srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256}}
 	err := srv.ListenAndServeTLS(cert, key)
 	if errors.Is(err, http.ErrServerClosed) {
@@ -181,7 +185,8 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		if r.TLS != nil {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
-		if allow := s.st.Settings().IPAllowlist; len(allow) > 0 && !ipAllowed(clientIP(r), allow) {
+		agentPath := strings.HasPrefix(r.URL.Path, "/api/agent/") || r.URL.Path == "/healthz"
+		if allow := s.st.Settings().IPAllowlist; len(allow) > 0 && !agentPath && !ipAllowed(clientIP(r), allow) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

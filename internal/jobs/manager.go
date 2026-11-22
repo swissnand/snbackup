@@ -43,6 +43,11 @@ type Manager struct {
 	stop   context.CancelFunc
 	wg     sync.WaitGroup
 	Audit  func(user, action, detail string)
+	hub    *hub
+	// HostRoot is set when running as a containerised agent with the host
+	// filesystem mounted (e.g. /host): sources are read below it while the
+	// original paths are stored.
+	HostRoot string
 }
 
 type cachedRepo struct {
@@ -58,7 +63,7 @@ func New(st *store.Store) *Manager {
 		n = 2
 	}
 	return &Manager{st: st, live: map[string]*Live{}, queued: map[string]string{}, sem: make(chan struct{}, n),
-		repoMu: map[string]*sync.Mutex{}, repos: map[string]*cachedRepo{}, next: map[string]time.Time{}, ctx: ctx, stop: cancel}
+		repoMu: map[string]*sync.Mutex{}, repos: map[string]*cachedRepo{}, next: map[string]time.Time{}, ctx: ctx, stop: cancel, hub: newHub()}
 }
 
 // OpenRepo opens (and caches) a configured repository.
@@ -80,7 +85,7 @@ func (m *Manager) OpenRepo(ctx context.Context, id string) (*repo.Repo, error) {
 	}
 	rp, err := repo.Open(ctx, be, r.Password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Ziel «%s» (%s): %w", r.Name, be.Location(), err)
 	}
 	m.mu.Lock()
 	m.repos[id] = &cachedRepo{r: rp, sig: sig}
@@ -140,6 +145,10 @@ func (m *Manager) Trigger(jobID, trigger string, full bool) error {
 		m.mu.Unlock()
 		return errors.New("Job läuft bereits")
 	}
+	if j.AgentID != "" {
+		m.mu.Unlock()
+		return m.dispatchJob(j, trigger, full)
+	}
 	if _, q := m.queued[jobID]; q {
 		m.mu.Unlock()
 		return errors.New("Job ist bereits in der Warteschlange")
@@ -174,7 +183,24 @@ func (m *Manager) Cancel(jobID string) bool {
 		l.cancel()
 		return true
 	}
+	if _, ok := m.live[jobID]; ok {
+		m.mu.Unlock()
+		defer m.mu.Lock()
+		return m.cancelDispatch(jobID)
+	}
 	return false
+}
+
+func appendLines(path string, lines []string) {
+	_ = os.MkdirAll(filepath.Dir(path), 0o700)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	for _, l := range lines {
+		f.WriteString(l + "\n")
+	}
 }
 
 // NextRun returns the cached next scheduled run of a job.

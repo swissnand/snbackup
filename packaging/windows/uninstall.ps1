@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 # Entfernt den Dienst und das Programm. Konfiguration und Backups bleiben erhalten.
 $dir = Join-Path $env:ProgramFiles 'SWISSNAND\Backup'
 & (Join-Path $dir 'snbackup.exe') service uninstall

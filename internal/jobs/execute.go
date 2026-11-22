@@ -253,6 +253,9 @@ func (rc *runCtx) backup(ctx context.Context) (*outcome, error) {
 		if j.Options.Priority == "low" || j.Options.Priority == "idle" {
 			opt.Workers = 1
 		}
+		if hr := rc.m.HostRoot; hr != "" {
+			opt.ReadPath = func(p string) string { return filepath.Join(hr, p) }
+		}
 		cleanup, err := rc.prepareSource(ctx, &opt)
 		if cleanup != nil {
 			defer cleanup()

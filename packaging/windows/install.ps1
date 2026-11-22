@@ -1,9 +1,16 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
   SWISSNAND Backup – Installation auf Windows Server 2016/2019/2022/2025
   Ausführen in PowerShell als Administrator:  .\install.ps1 [-Port 8550]
 #>
-param([int]$Port = 8550)
+param(
+  [int]$Port = 8550,
+  [switch]$Agent,          # als Agent eines zentralen Backup-Servers installieren
+  [string]$Server = '',
+  [string]$Token = '',
+  [string]$Fingerprint = '',
+  [string]$Name = ''
+)
 $ErrorActionPreference = 'Stop'
 
 $dir  = Join-Path $env:ProgramFiles 'SWISSNAND\Backup'
@@ -20,6 +27,19 @@ $path = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 if ($path -notlike "*$dir*") {
   [Environment]::SetEnvironmentVariable('Path', "$path;$dir", 'Machine')
   $env:Path += ";$dir"
+}
+
+if ($Agent) {
+  if (-not $Server -or -not $Token) { throw 'Für -Agent bitte -Server und -Token angeben (aus der Web-Konsole, Seite Agenten).' }
+  $exe = Join-Path $dir 'snbackup.exe'
+  $enrollArgs = @('agent', 'enroll', '--server', $Server, '--token', $Token)
+  if ($Fingerprint) { $enrollArgs += @('--fingerprint', $Fingerprint) }
+  if ($Name) { $enrollArgs += @('--name', $Name) }
+  & $exe @enrollArgs
+  if ($LASTEXITCODE -ne 0) { throw 'Registrierung fehlgeschlagen' }
+  & $exe service install --agent
+  Write-Host "`n  Agent installiert. Er erscheint in der Web-Konsole unter «Agenten».`n" -ForegroundColor Green
+  return
 }
 
 # Dienst (SYSTEM, Autostart, automatischer Neustart) + Firewall-Regel

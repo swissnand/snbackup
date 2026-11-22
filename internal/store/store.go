@@ -49,6 +49,13 @@ type Source struct {
 	CommandName     string   `json:"commandName,omitempty"`
 	DockerVolumes   []string `json:"dockerVolumes,omitempty"`
 	StopContainers  []string `json:"stopContainers,omitempty"`
+	// VM and image backups
+	VMIDs       []string `json:"vmIds,omitempty"`      // Proxmox VM/CT IDs ("all")
+	VzdumpMode  string   `json:"vzdumpMode,omitempty"` // snapshot | suspend | stop
+	HyperVVMs   []string `json:"hypervVMs,omitempty"`  // Hyper-V VM names
+	Devices     []string `json:"devices,omitempty"`    // block devices / image files
+	LVMSnapshot bool     `json:"lvmSnapshot,omitempty"`
+	SysVolumes  string   `json:"sysVolumes,omitempty"` // wbadmin include list
 }
 
 // Schedule describes when a job runs.
@@ -114,7 +121,8 @@ type Job struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	Enabled     bool           `json:"enabled"`
-	Type        string         `json:"type"` // backup | mirror | archive | copy | verify | prune
+	Type        string         `json:"type"`              // backup | mirror | archive | copy | verify | prune
+	AgentID     string         `json:"agentId,omitempty"` // "" = runs on the backup server itself
 	Source      Source         `json:"source"`
 	RepoID      string         `json:"repoId,omitempty"`
 	TargetRepo  string         `json:"targetRepo,omitempty"` // copy job destination
@@ -185,13 +193,41 @@ type Settings struct {
 	License           string   `json:"license,omitempty"`
 }
 
+// Agent is a machine that executes jobs on behalf of the backup server.
+type Agent struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Hostname   string     `json:"hostname"`
+	OS         string     `json:"os"`
+	Arch       string     `json:"arch"`
+	Version    string     `json:"version"`
+	IP         string     `json:"ip,omitempty"`
+	SecretHash string     `json:"secretHash"`
+	Enrolled   time.Time  `json:"enrolled"`
+	LastSeen   *time.Time `json:"lastSeen,omitempty"`
+	Disabled   bool       `json:"disabled,omitempty"`
+	Tags       []string   `json:"tags,omitempty"`
+}
+
+// EnrollToken allows a new agent to register once.
+type EnrollToken struct {
+	Hash    string    `json:"hash"`
+	Name    string    `json:"name"`
+	Created time.Time `json:"created"`
+	Expires time.Time `json:"expires"`
+	Reuse   bool      `json:"reuse"` // for Kubernetes DaemonSets / mass rollout
+	Uses    int       `json:"uses"`
+}
+
 // State is everything persisted in state.json.
 type State struct {
-	Repos    []*Repository `json:"repos"`
-	Jobs     []*Job        `json:"jobs"`
-	Users    []*User       `json:"users"`
-	Tokens   []*APIToken   `json:"tokens"`
-	Settings Settings      `json:"settings"`
+	Agents   []*Agent       `json:"agents,omitempty"`
+	Enroll   []*EnrollToken `json:"enroll,omitempty"`
+	Repos    []*Repository  `json:"repos"`
+	Jobs     []*Job         `json:"jobs"`
+	Users    []*User        `json:"users"`
+	Tokens   []*APIToken    `json:"tokens"`
+	Settings Settings       `json:"settings"`
 }
 
 // Run is one execution of a job.
@@ -200,6 +236,8 @@ type Run struct {
 	JobID    string          `json:"jobId"`
 	JobName  string          `json:"jobName"`
 	JobType  string          `json:"jobType"`
+	AgentID  string          `json:"agentId,omitempty"`
+	Agent    string          `json:"agent,omitempty"`
 	Trigger  string          `json:"trigger"` // schedule | manual | chain | api | catch-up
 	Start    time.Time       `json:"start"`
 	End      *time.Time      `json:"end,omitempty"`
@@ -336,6 +374,31 @@ func (s *Store) Repo(id string) (*Repository, bool) {
 		}
 	}
 	return nil, false
+}
+
+// Agent returns a copy of an agent.
+func (s *Store) Agent(id string) (*Agent, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, a := range s.st.Agents {
+		if a.ID == id {
+			c := *a
+			return &c, true
+		}
+	}
+	return nil, false
+}
+
+// Agents returns copies of all agents.
+func (s *Store) Agents() []*Agent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*Agent, 0, len(s.st.Agents))
+	for _, a := range s.st.Agents {
+		c := *a
+		out = append(out, &c)
+	}
+	return out
 }
 
 // Repos returns copies of all repositories (secrets removed).

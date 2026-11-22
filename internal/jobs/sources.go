@@ -278,6 +278,8 @@ func (rc *runCtx) prepareSource(ctx context.Context, opt *repo.BackupOptions) (f
 				}
 			}
 		}, nil
+	case "proxmox", "hyperv", "image", "sysimage":
+		return rc.prepareVM(ctx, opt)
 	}
 	return nil, fmt.Errorf("unbekannte Quelle %q", s.Kind)
 }
