@@ -81,8 +81,13 @@ Agent ──Daten (verschlüsselt)──► Ziel (NAS, S3, WebDAV …)
 
 ## Backup-Varianten
 
+In allen drei Modi werden nur neue Datenblöcke gespeichert, und jeder Snapshot lässt sich allein vollständig wiederherstellen. Der Modus bestimmt, **welche Dateien gelesen und geprüft** werden. Das beeinflusst Laufzeit, Last auf der Quelle und wie früh stille Datenfehler auffallen.
+
 | Variante | Beschreibung | Typischer Einsatz |
 |---|---|---|
+| **Modus Vollbackup** | Alle Dateien werden gelesen und geprüft | Wöchentlich oder monatlich |
+| **Modus inkrementell** | Nur Dateien, die seit dem **letzten Lauf** geändert wurden (Grösse, Änderungszeit, Inode) | Täglich, stündlich |
+| **Modus differenziell** | Alle Dateien, die seit dem **letzten Vollbackup** geändert wurden. Gibt es noch keines, wird zuerst eines erstellt | Täglich, kombiniert mit wöchentlichem Vollbackup |
 | **Datei-Backup, forever-incremental** | Nur geänderte Dateien werden gelesen (Grösse, Änderungszeit, Inode). Jeder Snapshot ist trotzdem vollständig | Standard für Server |
 | **Aktives Vollbackup** | Alle Dateien werden neu gelesen und geprüft (Option *Modus* oder *Vollbackup*-Knopf) | Periodisch, z. B. sonntags |
 | **Periodisches Vollbackup** | Automatisch wöchentlich oder monatlich ein aktives Vollbackup | Zusätzliche Sicherheit |
@@ -169,7 +174,7 @@ snbackup service       install|uninstall|status [--agent]
 snbackup job           list | run <name> [--full] | history [name]
 snbackup user reset    <name>
 snbackup init          --repo R
-snbackup backup        --repo R [--exclude P] [--exclude-file F] [--tag T] [--full] [--one-file-system]
+snbackup backup        --repo R [--full | --differential] [--exclude P] [--exclude-file F] [--tag T] [--full] [--one-file-system]
                        [--exclude-caches] [--exclude-larger-than MB] [--compression off|fast|auto|max]
                        [--workers N] [--limit-upload KB/s] [--stdin-name NAME] pfade…
 snbackup snapshots     --repo R

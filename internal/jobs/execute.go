@@ -243,7 +243,7 @@ func (rc *runCtx) backup(ctx context.Context) (*outcome, error) {
 
 		opt := repo.BackupOptions{
 			Paths: j.Source.Paths, Excludes: j.Source.Excludes, ExcludeCaches: j.Source.ExcludeCaches,
-			OneFileSystem: j.Source.OneFileSystem, Full: rc.full, Workers: j.Options.Workers,
+			OneFileSystem: j.Source.OneFileSystem, Full: rc.full, Differential: !rc.full && j.Options.Mode == "differential", Workers: j.Options.Workers,
 			JobID: j.ID, JobName: j.Name, Kind: j.Source.Kind, Tags: j.Options.Tags,
 			Progress: rc.progress, Log: rc.log,
 		}
@@ -270,7 +270,8 @@ func (rc *runCtx) backup(ctx context.Context) (*outcome, error) {
 		}
 		st := snap.Stats
 		rc.logf2("info", "Snapshot %s: %d Dateien, %s gesamt, %s neu, %s übertragen", snap.ID[:8], st.Files, human(st.Bytes), human(st.NewBytes), human(st.StoredBytes))
-		out = &outcome{snapshot: snap.ID, stats: &st, message: fmt.Sprintf("%d Dateien · %s neu", st.Files, human(st.NewBytes))}
+		modeName := map[string]string{"full": "Vollbackup", "incremental": "inkrementell", "differential": "differenziell"}[snap.Mode]
+		out = &outcome{snapshot: snap.ID, stats: &st, message: fmt.Sprintf("%s · %d Dateien · %s neu", modeName, st.Files, human(st.NewBytes))}
 		release()
 		if !j.Retention.Empty() {
 			rc.phase("Aufbewahrung anwenden")

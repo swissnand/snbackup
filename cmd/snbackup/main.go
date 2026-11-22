@@ -421,7 +421,8 @@ func cmdBackup(args []string) {
 	fs.Var(&ex, "exclude", "Ausschlussmuster (mehrfach)")
 	exFile := fs.String("exclude-file", "", "Datei mit Ausschlussmustern")
 	fs.Var(&tags, "tag", "Tag (mehrfach)")
-	full := fs.Bool("full", false, "Aktives Vollbackup")
+	full := fs.Bool("full", false, "Vollbackup: alle Dateien neu lesen")
+	diff := fs.Bool("differential", false, "Differenziell: Änderungen seit dem letzten Vollbackup")
 	oneFS := fs.Bool("one-file-system", false, "Nicht in andere Dateisysteme wechseln")
 	caches := fs.Bool("exclude-caches", false, "Ordner mit CACHEDIR.TAG ausschliessen")
 	larger := fs.Int("exclude-larger-than", 0, "Dateien grösser als N MB ausschliessen")
@@ -449,7 +450,7 @@ func cmdBackup(args []string) {
 		die(err)
 	}
 	defer lk.Unlock()
-	opt := repo.BackupOptions{Paths: paths, Excludes: ex, Full: *full, OneFileSystem: *oneFS, ExcludeCaches: *caches, Workers: *workers, JobID: *job, JobName: *job, Tags: tags, Progress: progressPrinter(),
+	opt := repo.BackupOptions{Paths: paths, Excludes: ex, Full: *full, Differential: *diff && !*full, OneFileSystem: *oneFS, ExcludeCaches: *caches, Workers: *workers, JobID: *job, JobName: *job, Tags: tags, Progress: progressPrinter(),
 		Log: func(level, msg string) {
 			if level != "info" {
 				fmt.Fprintln(os.Stderr, "\r\x1b[K"+c("33", "! ")+msg)
@@ -494,9 +495,10 @@ func cmdSnapshots(args []string) {
 		die(err)
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, bold("ID\tZEIT\tHOST\tJOB\tART\tDATEIEN\tGRÖSSE\tPFADE"))
+	fmt.Fprintln(tw, bold("ID\tZEIT\tHOST\tJOB\tART\tMODUS\tDATEIEN\tGRÖSSE\tNEU\tPFADE"))
+	modes := map[string]string{"full": "voll", "incremental": "inkrementell", "differential": "differenziell"}
 	for _, s := range snaps {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", s.ID[:8], s.Time.Local().Format("02.01.2006 15:04"), s.Host, s.JobName, s.Kind, s.Stats.Files, human(s.Stats.Bytes), strings.Join(s.Paths, ", "))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n", s.ID[:8], s.Time.Local().Format("02.01.2006 15:04"), s.Host, s.JobName, s.Kind, modes[s.Mode], s.Stats.Files, human(s.Stats.Bytes), human(s.Stats.NewBytes), strings.Join(s.Paths, ", "))
 	}
 	tw.Flush()
 	fmt.Println(dim(fmt.Sprintf("%d Snapshots", len(snaps))))

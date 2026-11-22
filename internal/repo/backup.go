@@ -46,11 +46,14 @@ type BackupOptions struct {
 	ExcludeCaches     bool
 	OneFileSystem     bool
 	Full              bool // ignore parent: re-read every file ("active full")
-	Workers           int
-	Host, JobID       string
-	JobName, Kind     string
-	Tags              []string
-	Streams           []Stream
+	// Differential compares against the last FULL snapshot of the job
+	// instead of the last snapshot (classic differential backup).
+	Differential  bool
+	Workers       int
+	Host, JobID   string
+	JobName, Kind string
+	Tags          []string
+	Streams       []Stream
 	// ReadPath maps an original absolute path to the path that is actually
 	// read (used for VSS shadow copies / LVM snapshots). nil = identity.
 	ReadPath func(string) string
@@ -219,7 +222,8 @@ func (r *Repo) Backup(ctx context.Context, opt BackupOptions) (*Snapshot, error)
 	if !opt.Full {
 		if snaps, err := r.Snapshots(ctx); err == nil {
 			for _, s := range snaps {
-				if s.Host == opt.Host && s.JobID == opt.JobID && s.Kind == opt.Kind && s.Origin == "" {
+				if s.Host == opt.Host && s.JobID == opt.JobID && s.Kind == opt.Kind && s.Origin == "" &&
+					(!opt.Differential || s.Mode == "full" || s.Mode == "") {
 					if nodes, err := r.LoadTree(ctx, s); err == nil {
 						b.parent = make(map[string]*Node, len(nodes))
 						for _, n := range nodes {
@@ -228,7 +232,11 @@ func (r *Repo) Backup(ctx context.Context, opt BackupOptions) (*Snapshot, error)
 							}
 						}
 						parentID = s.ID
-						b.log("info", "Basis-Snapshot %s (%s) – nur Änderungen werden gelesen", s.ID[:8], s.Time.Local().Format("02.01.2006 15:04"))
+						if opt.Differential {
+							b.log("info", "Differenziell: Basis ist das letzte Vollbackup %s (%s)", s.ID[:8], s.Time.Local().Format("02.01.2006 15:04"))
+						} else {
+							b.log("info", "Inkrementell: Basis-Snapshot %s (%s) – nur Änderungen seit dem letzten Lauf werden gelesen", s.ID[:8], s.Time.Local().Format("02.01.2006 15:04"))
+						}
 					}
 					break
 				}
@@ -293,6 +301,9 @@ func (r *Repo) Backup(ctx context.Context, opt BackupOptions) (*Snapshot, error)
 	b.stats.StoredBytes += b.tw.stored
 	b.stats.DurationMs = time.Since(start).Milliseconds()
 	mode := "incremental"
+	if opt.Differential {
+		mode = "differential"
+	}
 	if opt.Full || parentID == "" {
 		mode = "full"
 	}

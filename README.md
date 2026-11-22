@@ -32,6 +32,7 @@
 
 | Bereich | Möglichkeiten |
 |---|---|
+| **Backup-Modi** | **Vollbackup** (alles neu lesen), **inkrementell** (Änderungen seit dem letzten Lauf), **differenziell** (Änderungen seit dem letzten Vollbackup), kombinierbar mit automatischem Vollbackup wöchentlich/monatlich. Jeder Snapshot ist dank Deduplizierung ein vollständiger Wiederherstellungspunkt, ohne Ketten |
 | **Zentraler Backup-Server** | Agenten für Linux, Windows, Docker und Kubernetes (DaemonSet). Nur ausgehende HTTPS-Verbindungen, Registrierung per Einmal-Token, Zertifikats-Pinning. Jobs pro Rechner zuweisen, live verfolgen, abbrechen, Wiederherstellung direkt auf den Zielrechner. Agentenlos für Netzfreigaben und Datenbanken übers Netz |
 | **VMs & Bare Metal** | **Proxmox VE** (vzdump-Stream, dedupliziert), **Hyper-V** (Export-VM im laufenden Betrieb), **Disk-Images** von Disks und LVM-Volumes (optional per LVM-Snapshot), **Windows Bare Metal** über Windows Server-Sicherung |
 | **Backup-Varianten** | Datei-Backup (forever-incremental), aktives Vollbackup, periodisches Vollbackup (wöchentlich/monatlich), synthetische Vollbackups, **Spiegelung/Sync** mit Papierkorb, **Archiv** (.tar.gz, optional AES-256), **Backup-Kopie 3-2-1** auf ein zweites Ziel, **Integritätsprüfung**, **Bereinigung** |
@@ -66,6 +67,7 @@ Details zum Format und zum Melden von Sicherheitslücken: [SECURITY.md](SECURITY
 |---|---|
 | ![Agenten](docs/screenshots/16-agenten.png) **Agenten im ganzen Netz** | ![Agent hinzufügen](docs/screenshots/17-agent-hinzufuegen.png) **Agent hinzufügen: Linux, Windows, Docker, Kubernetes** |
 | ![Jobs](docs/screenshots/03-jobs.png) **Backup-Jobs pro Rechner** | ![Assistent](docs/screenshots/04-assistent-typ.png) **Job-Assistent: 14 Varianten** |
+| ![Modi](docs/screenshots/04d-assistent-modus.png) **Voll, inkrementell, differenziell** | ![Restore](docs/screenshots/09-wiederherstellen.png) **Snapshots mit Modus** |
 | ![Proxmox](docs/screenshots/04c-assistent-proxmox.png) **Proxmox-VMs über den Agent** | ![Kubernetes](docs/screenshots/17b-agent-kubernetes.png) **Kubernetes-DaemonSet** |
 | ![Zeitplan im Assistenten](docs/screenshots/05-assistent-zeitplan.png) **Zeitplan mit Vorschau** | ![Aufbewahrung](docs/screenshots/05b-assistent-aufbewahrung.png) **GFS-Aufbewahrung** |
 | ![Kalender](docs/screenshots/06-zeitplan.png) **Wochenkalender** | ![Aktivität](docs/screenshots/07-aktivitaet.png) **Live-Fortschritt & Verlauf** |
@@ -152,6 +154,8 @@ snbackup job history
 export SNB_REPO=/mnt/nas/backup           # oder s3:https://s3.wasabisys.com/bucket/srv1, webdav:https://…, rclone:nas:backup
 snbackup init
 snbackup backup /etc /home /var/www --exclude node_modules --exclude '*.tmp' --tag produktion
+snbackup backup /srv --full            # Vollbackup
+snbackup backup /srv --differential    # seit dem letzten Vollbackup
 pg_dump -Fc shop | snbackup backup --stdin-name shop.dump
 snbackup snapshots
 snbackup ls latest /var/www
