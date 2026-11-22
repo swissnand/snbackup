@@ -271,7 +271,7 @@ func (rc *runCtx) backup(ctx context.Context) (*outcome, error) {
 		st := snap.Stats
 		rc.logf2("info", "Snapshot %s: %d Dateien, %s gesamt, %s neu, %s übertragen", snap.ID[:8], st.Files, human(st.Bytes), human(st.NewBytes), human(st.StoredBytes))
 		modeName := map[string]string{"full": "Vollbackup", "incremental": "inkrementell", "differential": "differenziell"}[snap.Mode]
-		out = &outcome{snapshot: snap.ID, stats: &st, message: fmt.Sprintf("%s · %d Dateien · %s neu", modeName, st.Files, human(st.NewBytes))}
+		out = &outcome{snapshot: snap.ID, stats: &st, message: fmt.Sprintf("%s · %s · %s neu", modeName, files(st.Files), human(st.NewBytes))}
 		release()
 		if !j.Retention.Empty() {
 			rc.phase("Aufbewahrung anwenden")
@@ -460,7 +460,7 @@ func (rc *runCtx) archive(ctx context.Context) (*outcome, error) {
 		}
 	}
 	st := &repo.Stats{Files: files, Bytes: bytes, StoredBytes: size}
-	return &outcome{stats: st, message: fmt.Sprintf("%s · %d Dateien · %s", name, files, human(size))}, nil
+	return &outcome{stats: st, message: fmt.Sprintf("%s · %s · %s", name, filesN(files), human(size))}, nil
 }
 
 func safeName(s string) string {
@@ -491,6 +491,15 @@ func human(n int64) string {
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
+
+func files(n int64) string {
+	if n == 1 {
+		return "1 Datei"
+	}
+	return fmt.Sprintf("%d Dateien", n)
+}
+
+func filesN(n int64) string { return files(n) }
 
 // Human formats a byte count.
 func Human(n int64) string { return human(n) }

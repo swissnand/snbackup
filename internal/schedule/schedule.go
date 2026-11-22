@@ -385,7 +385,7 @@ func Describe(s store.Schedule) string {
 	case "cron":
 		d = "Cron: " + s.Cron
 	case "after":
-		d = "Nach anderem Job"
+		d = "Verkettet (nach anderem Job)"
 	}
 	if s.WindowStart != "" && s.WindowEnd != "" {
 		d += " · Fenster " + s.WindowStart + "–" + s.WindowEnd

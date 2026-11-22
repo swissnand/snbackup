@@ -104,6 +104,8 @@ const STATUS = {
   success: ['ok', 'Erfolgreich'], warning: ['warn', 'Warnung'], failed: ['err', 'Fehler'],
   cancelled: ['', 'Abgebrochen'], running: ['run', 'Läuft'], '': ['', 'Noch nie'],
 };
+const TRIG = { schedule: 'Zeitplan', manual: 'Manuell', chain: 'Verkettung', 'catch-up': 'Nachgeholt', server: 'Server', cli: 'Kommandozeile', api: 'API' };
+const trig = (t) => { t = String(t || ''); const [a, b] = t.split(':'); return (TRIG[a] || a) + (b ? ' · ' + b : ''); };
 const statusBadge = (s) => { const [c, l] = STATUS[s || ''] || ['', s]; return `<span class="badge ${c}"><span class="d"></span>${l}</span>`; };
 
 const TYPES = {
@@ -452,7 +454,7 @@ async function pgJobs() {
         <td>${esc(j.repoName || j.targetPath || '–')}</td>
         <td><span class="${j.enabled ? '' : 'muted'}">${esc(j.scheduleText)}</span></td>
         <td>${j.lastRun ? dt(j.lastRun) + `<div class="muted" style="font-size:12px">${rel(j.lastRun)}</div>` : '<span class="muted">–</span>'}</td>
-        <td>${j.enabled ? (j.nextRun ? dt(j.nextRun) + `<div class="muted" style="font-size:12px">${rel(j.nextRun)}</div>` : '<span class="muted">manuell</span>') : '<span class="badge"><span class="d"></span>pausiert</span>'}</td>
+        <td>${j.enabled ? (j.nextRun ? dt(j.nextRun) + `<div class="muted" style="font-size:12px">${rel(j.nextRun)}</div>` : `<span class="muted">${j.schedule.kind === 'after' ? 'nach ' + esc((jobs.find((x) => x.id === j.schedule.afterJob) || {}).name || 'anderem Job') : 'manuell'}</span>`) : '<span class="badge"><span class="d"></span>pausiert</span>'}</td>
         <td>${j.busy ? statusBadge('running') : statusBadge(j.lastStatus)}</td>
         <td><div class="actions">
           ${j.busy ? `<button class="btn sm danger" data-act="stop" data-id="${j.id}" title="Stoppen">${icon('stop', 'sm')}</button>` : `<button class="btn sm" data-act="run" data-id="${j.id}" title="Jetzt ausführen">${icon('play', 'sm')}Start</button>`}
@@ -478,7 +480,7 @@ async function openJobDetail(id) {
       <div class="stat"><span>Typ</span><b>${t.label}</b></div><div class="stat"><span>Zeitplan</span><b>${esc(j.scheduleText)}</b></div>
       <div class="stat"><span>Nächster Lauf</span><b>${j.nextRun ? dt(j.nextRun) : '–'}</b></div><div class="stat"><span>Erfolgsquote</span><b>${runs.length ? Math.round((ok / runs.length) * 100) + ' %' : '–'}</b></div></div>
       <table class="t"><thead><tr><th>Start</th><th>Auslöser</th><th>Dauer</th><th>Daten</th><th>Ergebnis</th><th>Status</th></tr></thead><tbody>
-      ${runs.length ? runs.map((r) => `<tr class="click" data-act="log" data-id="${r.id}" data-title="${esc(r.jobName)}"><td>${dt(r.start, true)}</td><td class="muted">${esc(r.trigger)}</td><td>${r.end ? dur(new Date(r.end) - new Date(r.start)) : '–'}</td><td>${r.stats ? bytes(r.stats.newBytes || r.stats.bytes) : '–'}</td><td class="muted">${esc(r.message || '')}</td><td>${statusBadge(r.status)}</td></tr>`).join('') : '<tr><td colspan="6" class="muted">Noch keine Läufe</td></tr>'}
+      ${runs.length ? runs.map((r) => `<tr class="click" data-act="log" data-id="${r.id}" data-title="${esc(r.jobName)}"><td>${dt(r.start, true)}</td><td class="muted">${esc(trig(r.trigger))}</td><td>${r.end ? dur(new Date(r.end) - new Date(r.start)) : '–'}</td><td>${r.stats ? bytes(r.stats.newBytes || r.stats.bytes) : '–'}</td><td class="muted">${esc(r.message || '')}</td><td>${statusBadge(r.status)}</td></tr>`).join('') : '<tr><td colspan="6" class="muted">Noch keine Läufe</td></tr>'}
       </tbody></table>`,
     foot: `<button class="btn danger" data-act="del-job" data-id="${j.id}" data-close>${icon('trash', 'sm')}Löschen</button><button class="btn" data-act="clone-job" data-id="${j.id}" data-close>${icon('copy', 'sm')}Duplizieren</button><div style="flex:1"></div>
       ${j.type === 'backup' ? `<button class="btn" data-act="run" data-id="${j.id}" data-full="1" data-close>${icon('zap', 'sm')}Vollbackup</button>` : ''}
@@ -929,7 +931,7 @@ async function pgActivity() {
     <div class="toolbar"><div class="seg">${[['', 'Alle'], ['success', 'Erfolgreich'], ['warning', 'Warnungen'], ['failed', 'Fehler'], ['cancelled', 'Abgebrochen']].map(([v, l]) => `<button data-s="${v}" class="${status === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="card"><table class="t"><thead><tr><th>Job</th><th>Start</th><th>Dauer</th><th>Dateien</th><th>Neu / Übertragen</th><th>Ergebnis</th><th>Status</th></tr></thead><tbody>
     ${(runs || []).filter((r) => r.status !== 'running').map((r) => { const t = TYPES[r.jobType] || (r.jobType === 'restore' ? { icon: 'restore', label: 'Wiederherstellung' } : TYPES.files); return `<tr class="click" data-act="log" data-id="${r.id}" data-title="${esc(r.jobName)}">
-      <td><div class="t-name"><div class="typeicon">${icon(t.icon)}</div><div><b>${esc(r.jobName)}</b><span>${esc(r.trigger)}${r.agent ? ' · ' + esc(r.agent) : ''}${r.attempt > 1 ? ' · Versuch ' + r.attempt : ''}</span></div></div></td>
+      <td><div class="t-name"><div class="typeicon">${icon(t.icon)}</div><div><b>${esc(r.jobName)}</b><span>${esc(trig(r.trigger))}${r.agent ? ' · ' + esc(r.agent) : ''}${r.attempt > 1 ? ' · Versuch ' + r.attempt : ''}</span></div></div></td>
       <td>${dt(r.start, true)}</td><td>${r.end ? dur(new Date(r.end) - new Date(r.start)) : '–'}</td><td>${r.stats ? r.stats.files : '–'}</td>
       <td>${r.stats ? bytes(r.stats.newBytes) + ' / ' + bytes(r.stats.storedBytes) : '–'}</td><td class="muted" style="max-width:340px">${esc(r.message || '')}</td><td>${statusBadge(r.status)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:30px">Keine Einträge</td></tr>'}
     </tbody></table></div>`;

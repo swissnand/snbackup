@@ -122,7 +122,7 @@ func (rc *runCtx) mirror(ctx context.Context) (*outcome, error) {
 			}
 		}
 	}
-	return &outcome{stats: st, message: fmt.Sprintf("%d Dateien · %d kopiert · %s", st.Files, st.ChangedFile, human(st.NewBytes))}, nil
+	return &outcome{stats: st, message: fmt.Sprintf("%s · %d kopiert · %s", files(st.Files), st.ChangedFile, human(st.NewBytes))}, nil
 }
 
 func copyFile(src, dst string, fi fs.FileInfo) error {

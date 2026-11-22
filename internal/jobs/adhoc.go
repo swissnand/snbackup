@@ -92,7 +92,7 @@ func (m *Manager) Restore(req RestoreRequest) (string, error) {
 			if err != nil {
 				return err
 			}
-			run.Message = fmt.Sprintf("%d Dateien · %s · %d übersprungen · %d Fehler", res.Files, human(res.Bytes), res.Skipped, res.Errors)
+			run.Message = fmt.Sprintf("%s · %s · %d übersprungen · %d Fehler", files(res.Files), human(res.Bytes), res.Skipped, res.Errors)
 			run.Stats = &repo.Stats{Files: res.Files, Bytes: res.Bytes, Errors: res.Errors}
 			if res.Errors > 0 {
 				return fmt.Errorf("%d Fehler bei der Wiederherstellung", res.Errors)
